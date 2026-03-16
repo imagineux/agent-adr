@@ -126,11 +126,83 @@ See `examples/sample-collection-layout.md`.
 
 ## Testing
 
-The `tests/` directory contains:
-- `smoke-test.sh` - Simple test harness for core safety features
-- `fake-agentrc.sh` - Complex agentrc simulator (legacy)
+The `tests/` directory contains comprehensive testing infrastructure:
 
-Run tests with `KEEP_TEST_ARTIFACTS=1` to preserve test output for inspection.
+### Confidence Harness (Recommended)
+```bash
+# Run full confidence test suite
+./tests/smoke-test-confidence.sh
+
+# Keep artifacts for inspection
+KEEP_TEST_ARTIFACTS=1 ./tests/smoke-test-confidence.sh
+```
+
+**What the confidence harness proves:**
+- ✅ Wrapper collects artifacts correctly across all scenarios
+- ✅ Failures are preserved and surfaced in prompts  
+- ✅ Repo boundary guard prevents contamination
+- ✅ Paths with spaces/special characters work safely
+- ✅ Prompt builder handles missing/failure artifacts gracefully
+- ✅ Deterministic behavior (no randomness or external dependencies)
+
+**What it does NOT prove:**
+- ❌ Real `agentrc` behavior or output quality
+- ❌ Actual Copilot CLI integration
+- ❌ Network connectivity to AI services
+- ❌ Production environment performance
+
+### Test Scenarios Covered
+1. **Success Path**: Full successful collection with all probes and generations
+2. **Analyze Failure**: analyze fails but collection continues
+3. **Probe Failures**: dry-run probes fail but real generation succeeds  
+4. **Generation Failures**: real generation fails with proper error capture
+5. **Partial Output**: Generation creates file but reports failure
+6. **Network Errors**: Connectivity issues handled gracefully
+7. **Repo Boundary Guard**: Output inside repo is rejected
+8. **Path Safety**: Paths with spaces and special characters
+9. **Prompt Builder**: Both synthesis and review prompts generated correctly
+10. **Missing Files**: Failed generations marked as "(missing)" in prompts
+11. **Context Copying**: Context files copied when available
+12. **Deterministic Behavior**: Same inputs produce same outputs
+
+### Legacy Tests
+- `smoke-test.sh` - Basic smoke test for core safety features
+- `fake-agentrc.sh` - Enhanced agentrc simulator with multiple behaviors
+
+### Test Utilities
+- `test-utils.sh` - Common assertion and validation functions
+- `create-fixtures.sh` - Generate test repositories with different characteristics
+
+### Running Tests in CI
+```bash
+# CI-friendly execution (no artifacts kept)
+./tests/smoke-test-confidence.sh
+
+# Using Makefile (recommended)
+make test
+
+# With timeout for CI environments
+timeout 300 make test || exit 1
+
+# Keep artifacts for debugging
+KEEP_TEST_ARTIFACTS=1 make test
+make test-keep-artifacts
+```
+
+### Quick Test Commands
+```bash
+# Fast confidence check
+make test
+
+# Inspect test artifacts  
+make test-keep-artifacts
+ls -la /tmp/agent-adr-confidence-*/
+
+# Clean up
+make clean
+```
+
+All tests run in < 30 seconds without network dependencies, making them ideal for CI pipelines.
 
 ## Design principles
 
