@@ -1,51 +1,67 @@
-# AI Enablement ADR: <Repository / Program Name>
+# Title
 
-## Title
-<Clear decision title>
+AI Enablement ADR: `<repo-name>`
 
 ## Status
+
 Proposed | Accepted | Superseded
 
 ## Date
-YYYY-MM-DD
+
+`YYYY-MM-DD`
 
 ## Repository
-- Name: 
-- URL / Location: 
-- Commit / Snapshot: 
+
+- Name:
+- URL/Origin:
+- Commit/Snapshot Assessed:
 
 ## Context
-Describe the current repo purpose, team expectations, delivery pressure, and why AI enablement is being evaluated now.
+
+Describe the business and engineering context for this repository and why AI enablement decisions are needed now.
 
 ## Observed Facts
-Only verifiable findings from artifacts and diagnostics.
+
+List verifiable facts only, with evidence references to collected artifacts.
 
 ## Unknowns / Limits
-What is missing, unverified, or blocked by tooling/environment.
+
+Explicitly capture missing telemetry, uncertain assumptions, and collection blind spots.
 
 ## Current Engineering Maturity
-Assess codebase hygiene, tests, CI/CD posture, architecture clarity, and operational reliability.
+
+Assess practical engineering maturity (e.g., test posture, CI hygiene, standards, reviewability, documentation quality).
 
 ## Current AI Enablement Maturity
-Assess existing instructions, skills, workflows, governance, and prompt discipline.
+
+Assess practical AI readiness (instructions, task decomposition affordances, evaluability, governance, safe automation signals).
 
 ## Governance / Constraints
-Security, compliance, data boundaries, tooling restrictions, enterprise policy constraints.
+
+Document constraints that materially shape recommendations:
+- Compliance / legal / data sensitivity
+- Security and access boundaries
+- Team capacity and skill depth
+- Tooling/runtime constraints
 
 ## 8-Layer Maturity Interpretation
-1. Codebase structure
-2. Documentation quality
-3. Build/test reliability
-4. Delivery workflows
-5. AI instruction quality
-6. AI workflow integration
-7. Guardrails/governance
-8. Continuous improvement loop
+
+Provide concise interpretation across these layers:
+1. Repository & documentation basics
+2. Build/test reliability
+3. Work decomposition & task clarity
+4. AI-facing instructions quality
+5. Evaluation and feedback loops
+6. Safe workflow automation
+7. Cross-tool integration (only if justified)
+8. Adaptive/autonomous operation (only if justified)
 
 ## Decision
-State what will be adopted now and what is deferred.
+
+State what the team should adopt now, defer, and explicitly avoid in this phase.
 
 ## Recommended Next Investments
+
 ### Instructions
 
 ### Skills
@@ -57,19 +73,25 @@ State what will be adopted now and what is deferred.
 ### Learning / Upskilling
 
 ## Suggested Artifacts to Add
-List concrete files, templates, checks, and ownership.
+
+List concrete files/configs/playbooks to add or improve.
 
 ## Experiments to Validate Improvement
-Define small experiments with time-box, owner, and expected signal.
+
+Define small, measurable experiments with owner + timeframe.
 
 ## Success Metrics
-Use measurable, practical indicators. Avoid invented telemetry.
+
+Define practical metrics and expected directional changes.
 
 ## Risks / Caveats
-Where recommendations may fail or be misused.
+
+Call out implementation and adoption risks.
 
 ## Consequences
-Tradeoffs, cost of adoption, and operational impact.
+
+Describe trade-offs, including what becomes easier and what remains hard.
 
 ## Follow-Up Checkpoints
-30/60/90 day checkpoints, decision gates, and reassessment triggers.
+
+Specify review checkpoints (e.g., 2 weeks, 6 weeks, quarter) and reassessment criteria.

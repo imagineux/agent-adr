@@ -1,31 +1,64 @@
-# agent-adr: Thin enterprise-safe wrapper around `microsoft/agentrc`
+# agent-adr (thin `agentrc` wrapper)
 
-This repository is intentionally narrow.
+A minimal operator utility for collecting repository evidence with [`microsoft/agentrc`](https://github.com/microsoft/agentrc) and building a high-quality ADR synthesis prompt for stronger reasoning models.
 
-It is **not** a replacement for `agentrc`.
-It is **not** a Copilot SDK app.
-It is **not** an AI platform.
+## What this repo is (and is not)
 
-It does one job: collect `agentrc` evidence safely, preserve failures/diagnostics, and prepare prompt bundles for stronger-model ADR synthesis and review.
+This repo is intentionally **thin**.
 
-## What we trust vs. what we own
+- ✅ Uses `agentrc` as a scanner/collector in the **client environment**.
+- ✅ Optionally attempts `agentrc instructions` generation (best effort).
+- ✅ Stores all collected artifacts in a directory **outside** the client repo.
+- ✅ Builds a large, structured prompt bundle with our own synthesis templates.
+- ✅ Includes a reusable ADR template + synthesis skill.
 
-### We trust `agentrc` for
-- Repo analysis
-- Readiness reporting
-- Optional low-tier instruction generation attempts
+- ❌ Not a full CLI platform.
+- ❌ Not a reimplementation of `agentrc`.
+- ❌ Not coupled to the Copilot SDK.
+- ❌ Not writing into the client repo during normal collection.
 
-### We do **not** trust `agentrc` for
-- Final recommendations
-- Final ADR authoring
-- Guaranteed-stable instruction generation
+## Why this exists
 
-### We own
-- Collection workflow
-- Diagnostics capture
-- Artifact normalization
+We use `agentrc` only as an artifact collector and optional instruction generator.
+
+We own:
+- Collection runbook
+- Prompt templates
 - ADR template
-- Strong-model synthesis/review prompts
+- Final synthesis layer and recommendations
+
+We do **not** delegate final recommendations or ADR authorship to `agentrc`.
+
+## Workflow model
+
+1. **Collect in client environment** using `scripts/collect-agentrc.sh`.
+2. Review output artifacts and logs.
+3. **Synthesize in our environment** with `scripts/build-strong-model-prompt.mjs`.
+4. Paste prompt into a stronger model (Kimi K2.5, SWE-1.5, GPT-5.4 Pro, etc.).
+5. Review and deliver a repo-specific AI enablement ADR.
+
+## Prerequisites
+
+- Bash
+- Node.js (for prompt builder; stdlib only)
+- `npx` able to run `github:microsoft/agentrc`
+
+## Happy path
+
+```bash
+# 1) Collect artifacts from a client repo into a separate directory
+./scripts/collect-agentrc.sh /path/to/client/repo ./collections/client-repo-name
+
+# 2) Inspect collection outputs
+find ./collections/client-repo-name -maxdepth 3 -type f | sort
+
+# 3) Build strong-model prompts
+node scripts/build-strong-model-prompt.mjs --collection ./collections/client-repo-name --out ./collections/client-repo-name/prompts
+
+# 4) Paste synthesis prompt into Kimi / SWE / GPT-5.4 Pro
+# 5) Optionally run review prompt against first-pass ADR
+# 6) Review generated ADR, refine if needed, deliver
+```
 
 ## Safety and Hardening
 
@@ -36,20 +69,16 @@ This wrapper has been hardened for enterprise use:
 - **Deterministic Smoke Tests**: Test harness with fake agentrc shim simulates success/failure scenarios
 - **Failure Robustness**: Collection continues across probe/generation failures; all artifacts produce status/log files even on failure
 
-## Main deliverables
-- **Collection bundle** (portable, outside client repo)
-- **ADR template**
-- **Strong-model synthesis prompt**
-- **Strong-model review prompt**
+## Core scripts
 
-## Scripts
+### `scripts/collect-agentrc.sh`
 
-### 1) Collect artifacts safely
+Usage:
 ```bash
 ./scripts/collect-agentrc.sh /path/to/client/repo ./collections/client-repo-name
 ```
 
-Behavior highlights:
+What it does:
 - Enforces `AGENTRC_DEBUG_COPILOT=1`
 - Preserves `AGENTRC_COPILOT_CLI_PATH` if provided
 - Overrides model for instruction flow (default: `gpt-5-mini`)
@@ -58,45 +87,56 @@ Behavior highlights:
 - Writes summary + notes
 - Aborts if output directory would be inside the client repo
 
-### 2) Build strong-model prompts
+### `scripts/build-strong-model-prompt.mjs`
+
+Usage:
 ```bash
 node scripts/build-strong-model-prompt.mjs --collection ./collections/client-repo-name --out ./collections/client-repo-name/prompts
 ```
+
+What it does:
+- Loads collection artifacts and context
+- Labels missing artifacts explicitly
+- Injects JSON and markdown into template placeholders
+- Produces deterministic final prompt files ready for strong-model synthesis
 
 Outputs:
 - `prompts/adr-synthesis-prompt.md`
 - `prompts/adr-review-prompt.md`
 
-### 3) Run smoke tests (optional)
-```bash
-./tests/smoke-test.sh
-```
+## Output artifacts
 
-Tests verify:
-- Basic collection works and creates required files
-- Repo boundary guard rejects invalid configurations  
-- Paths with spaces are handled correctly
-- Prompt builder emits both prompt files
+A typical collection includes:
+- `analyze.json`
+- `readiness.json`
+- `collection-summary.json`
+- `instructions-overview.md`
+- Probe and generation attempts with status/logs
+- `context/` (best-effort copied files)
+- `prompts/` (built synthesis and review prompts)
 
-## Short operator flow
-1. Run collection on client machine.
-2. Inspect bundle (`collection-summary.json`, `instructions-overview.md`, logs).
-3. Build prompts.
-4. Paste synthesis prompt into a stronger model (Kimi K2.5 / SWE-1.5 / GPT-5.4 Pro).
-5. Optionally run review prompt against first-pass ADR.
-6. Deliver final ADR.
+See `examples/sample-collection-layout.md`.
 
-## Important stance on instruction generation
-Instruction generation can be flaky in enterprise environments.
+## Templates and skill
 
-Even `instructions --dry-run` still exercises generation flow, so failures are expected and treated as useful diagnostics. Generated instruction files are handled as candidate drafts, not approved outputs.
-
-## Example
-See `examples/sample-collection-layout.md` for expected bundle layout.
+- `templates/ai-enablement-adr-template.md` — structured ADR output contract
+- `templates/strong-model-synthesis-template.md` — generic strong-model synthesis prompt
+- `templates/strong-model-review-template.md` — adversarial review prompt
+- `skills/compose-ai-enablement-adr.md` — reusable ADR composition skill/instructions
 
 ## Testing
+
 The `tests/` directory contains:
 - `smoke-test.sh` - Simple test harness for core safety features
 - `fake-agentrc.sh` - Complex agentrc simulator (legacy)
 
 Run tests with `KEEP_TEST_ARTIFACTS=1` to preserve test output for inspection.
+
+## Design principles
+
+- Small surface area
+- Explicit evidence handling
+- Honest uncertainty reporting
+- Constraint-first recommendations
+- No overengineering
+- Enterprise-safe operation

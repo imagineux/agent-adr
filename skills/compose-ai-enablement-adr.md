@@ -1,44 +1,59 @@
-# Skill: compose-ai-enablement-adr
+# Skill: Compose AI Enablement ADR
 
 ## Purpose
-Compose a repo-specific AI enablement ADR from a collection bundle produced by the thin agentrc wrapper.
 
-## Required Inputs
+Produce a practical, evidence-grounded AI enablement ADR for a specific repository using collected artifacts (including optional `agentrc` instruction output) without overclaiming certainty.
+
+## Required inputs
+
+- `collection-summary.json`
 - `analyze.json`
 - `readiness.json`
-- dry-run probe statuses/logs
-- generation attempt statuses/logs
-- generated instruction drafts (if any)
-- context files copied from client repo
-- collection summary + environment metadata
+- `instructions-status.json`
+- `copilot-instructions.generated.md` (optional)
+- copied `context/` files (optional)
+- `notes.md` (optional)
+- `templates/ai-enablement-adr-template.md`
 
-## Synthesis Method
-1. Extract hard facts from artifacts.
-2. Separate facts from inference and unknowns.
-3. Score engineering and AI enablement maturity conservatively.
-4. Evaluate low-tier generation attempts as candidate drafts only.
-5. Account for failures and constraints before recommending expansions.
-6. Produce phased recommendations with validation experiments.
+## Synthesis steps
 
-## Anti-Patterns
-- Invented telemetry.
-- Generic best-practice sludge.
-- Assuming generated instructions are good because they exist.
-- Over-recommending MCP or advanced agents.
-- Failing to distinguish facts / inferences / unknowns.
-- Ignoring collection failures and diagnostics.
+1. **Inventory evidence**
+   - Confirm what artifacts are present/missing.
+   - Mark data-quality issues up front.
+2. **Extract facts**
+   - Pull concrete, verifiable facts from JSON and context files.
+   - Keep facts separate from interpretation.
+3. **Interpret maturity**
+   - Assess engineering maturity and AI enablement maturity with explicit confidence limits.
+4. **Constraint-first planning**
+   - Identify governance, risk, capacity, and tooling constraints.
+   - Shape recommendations to near-term reality.
+5. **Phase recommendations**
+   - Prioritize small, high-leverage moves first.
+   - Defer advanced autonomy unless readiness is evident.
+6. **Define validation**
+   - Propose measurable experiments and success metrics.
+7. **Write ADR**
+   - Fill every ADR section crisply and specifically.
 
-## Output Contract
-Produce an ADR that includes:
-- decision and rationale
-- evidence and uncertainty
-- near-term actions and ownership candidates
-- phased improvement plan
-- measurable success metrics
-- risks and follow-up checkpoints
+## Anti-patterns
 
-## Quality Bar
-- Practical, direct, consulting-grade tone.
-- Claims tied to evidence.
-- Uncertainty explicitly labeled.
-- Recommendations right-sized to current maturity.
+- Invented telemetry (usage numbers, adoption stats, productivity deltas).
+- Generic "best practices" wallpaper with no repo tie-in.
+- Treating missing files as automatic dysfunction without nuance.
+- Assuming generated instructions are good only because they exist.
+- Recommending too many changes at once.
+
+## Output contract
+
+- Must follow the ADR template structure exactly.
+- Must separate facts, inferences, and recommendations.
+- Must include unknowns/limits and confidence caveats.
+- Must provide phased next investments and validation experiments.
+
+## Quality bar
+
+- Repo-specific, practical, and implementable within team constraints.
+- Honest uncertainty where evidence is incomplete.
+- Direct language; no buzzword inflation.
+- Recommendations sequenced for adoption, not theater.
