@@ -2,6 +2,14 @@
 
 A minimal operator utility for collecting repository evidence with [`microsoft/agentrc`](https://github.com/microsoft/agentrc) and building a high-quality ADR synthesis prompt for stronger reasoning models.
 
+## Quick Start (Client Repo)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/imagineux/agent-adr/main/install.sh | bash
+```
+
+See [USAGE.md](USAGE.md) for complete step-by-step guide.
+
 ## What this repo is (and is not)
 
 This repo is intentionally **thin**.
@@ -203,6 +211,15 @@ All tests run in < 30 seconds without network dependencies, making them ideal fo
 ## Client Deployment Guide
 
 This section helps consultants deploy agent-adr in client environments for maximum value.
+
+### Quick Start
+
+**For immediate use in client repo:**
+```bash
+curl -sSL https://raw.githubusercontent.com/imagineux/agent-adr/main/install.sh | bash
+```
+
+See [USAGE.md](USAGE.md) for complete step-by-step guide.
 
 ### Quick Setup Options
 
