@@ -1,34 +1,60 @@
-# Kimi K2.5 Prompt: Repository AI Enablement ADR Synthesis with Educational Framework
+# AI Enablement ADR Synthesis with Educational Framework
 
 You are producing a consulting-grade, repository-specific AI enablement ADR using evidence from agentrc collection and comprehensive educational resources.
 
-## Critical guardrails
+## Educational Framework & Evaluation Matrix
 
-- Do **not** overclaim certainty.
-- Do **not** assume real Copilot usage/adoption only from repository files.
-- Do **not** recommend advanced agentic workflows for immature repos.
-- Do **not** recommend MCP just because it is fashionable.
-- Prefer practical sequence: instructions + evals + safe workflows before advanced autonomy.
-- Treat generated instructions as candidate text, not automatically good.
-- Ground all recommendations in the 8-layer maturity framework and educational resources.
+### 8-Layer Maturity Model for AI Readiness
 
-## Method
+1. **Repository & documentation basics** - Clean, well-documented codebase
+2. **Build/test reliability** - Consistent CI/CD and quality gates  
+3. **Work decomposition & task clarity** - Tasks broken into AI-assistable units
+4. **Instruction readiness** - Clear patterns for AI assistance
+5. **Skills & evals framework** - Team capability assessment and validation
+6. **Safe workflows** - Human-AI collaboration patterns with guardrails
+7. **MCP (Model Context Protocol) readiness** - Advanced tool integration
+8. **Autonomy & agentic workflows** - Self-directing AI systems
 
-1. Extract factual evidence from artifacts.
-2. Mark inferences explicitly.
-3. Assess constraints before proposing changes.
-4. Map to educational framework and decision matrix.
-5. Produce a phased plan (now, next, later) with measurable validation.
-6. Fill the ADR template completely including educational appendix.
+### Evaluation Matrix for Recommendations
 
-## You must answer explicitly
+**Current State Assessment:**
+- **Technical maturity (layers 1-3)**: Infrastructure, build systems, task organization
+- **AI readiness (layers 4-6)**: Instructions, skills, workflows, safety measures  
+- **Advanced capability (layers 7-8)**: Tool integration, autonomous systems
 
-- What the repo appears to be and its current 8-layer maturity level
-- Which specific educational resources and learning path are most relevant
-- Readiness for instructions, skills, evals, workflows, MCP, and autonomy
-- First best next moves and team learning priorities
-- How the decision framework applies to recommended investments
-- Validation experiments and success metrics with clear learning progression
+**Recommendation Framework:**
+- **Conservative (layers 1-3)**: Focus on basics, documentation, build reliability
+- **Moderate (layers 4-6)**: Add instructions, skills development, safe workflows
+- **Advanced (layers 7-8)**: MCP integration, autonomy with strong governance
+
+**Decision Criteria:**
+- Team AI experience level
+- Criticality of repository/system
+- Available resources for learning
+- Risk tolerance for AI experimentation
+- Existing AI tooling adoption
+
+## Enhanced Analysis Requirements
+
+In addition to the standard analysis, you must explicitly address:
+
+- **Current 8-layer maturity assessment** with specific evidence from each layer
+- **Team readiness evaluation** - skills, experience, learning capacity, time availability
+- **Risk analysis** - what could go wrong at each maturity level and mitigation strategies
+- **Resource requirements** - time, expertise, tooling, budget needed for each phase
+- **Sequencing rationale** - why this specific order of recommendations makes sense
+- **Validation experiments** - how to test each recommendation safely before full rollout
+- **Success metrics** - measurable outcomes and KPIs for each recommendation
+- **Learning progression** - how team builds capabilities incrementally
+
+## Enhanced Method
+
+1. **Extract factual evidence** from agentrc artifacts
+2. **Assess current maturity** using 8-layer framework with specific evidence
+3. **Evaluate team readiness** and technical constraints honestly
+4. **Apply decision matrix** for recommendation sequencing and risk assessment
+5. **Map learning progression** with measurable validation steps and success criteria
+6. **Generate phased plan** (now, next, later) with clear resource requirements
 
 ---
 

@@ -12,7 +12,10 @@ npm install -g github:imagineux/agent-adr
 agent-adr /path/to/client/repo --output ../collections/client-name
 agent-adr microsoft/vscode --output ../collections/vscode
 
-# 3. Paste into your preferred advanced AI model
+# 3. With educational framework (comprehensive analysis)
+agent-adr microsoft/vscode --output ../collections/vscode --education
+
+# 4. Paste into your preferred advanced AI model
 # Copy the prompt from: ../collections/client-name/prompts/adr-synthesis-prompt.md
 ```
 
@@ -61,6 +64,7 @@ We do **not** delegate final recommendations or ADR authorship to `agentrc`.
 - Node.js 18+ (use `nvm install 18` to install)
 - npm (comes with Node.js)
 - git (for cloning remote repos)
+- agentrc (automatically installed as npm dependency)
 
 ## Installation
 
@@ -144,8 +148,33 @@ A typical collection includes:
 
 ## Templates
 
-- `templates/adr-synthesis-template.md` — synthesis prompt
-- `templates/ai-enablement-adr-template.md` — structured ADR output contract
+The tool uses different synthesis templates based on the analysis depth required:
+
+### Standard Template (`adr-synthesis-template.md`)
+- Basic repository analysis and AI readiness assessment
+- Focused on practical recommendations
+- Suitable for quick assessments and mature repositories
+
+### Educational Template (`adr-synthesis-with-education-template.md`) 
+- **Template composition** - Includes standard template + educational framework
+- **8-layer maturity model** for comprehensive AI readiness assessment
+- **Evaluation matrix** for recommendation sequencing and risk assessment
+- **Enhanced analysis requirements** - team readiness, resource planning, validation experiments
+- Suitable for organizations new to AI or needing comprehensive transformation plans
+
+### ADR Output Template (`ai-enablement-adr-template.md`)
+- Structured format for the final Architecture Decision Record
+- Standard sections for consistent documentation
+- Used by both synthesis templates for output formatting
+
+**Template selection:**
+```bash
+# Standard analysis
+agent-adr repo --output ../collections/repo
+
+# Educational analysis with comprehensive framework
+agent-adr repo --output ../collections/repo --education
+```
 
 ## Installation
 
