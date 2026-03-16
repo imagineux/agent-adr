@@ -114,7 +114,52 @@ echo "✅ Ready! Check ./collections/$(basename "$PWD")/prompts/"
 chmod +x ./tools/scripts/collect-agentrc.sh
 ```
 
-## 📞 Need Help?
+## � Secure Transfer (Locked-Down Clients)
+
+For clients who don't want data leaving their system:
+
+### One-Command Secure Workflow
+```bash
+./tools/scripts/secure-transfer.sh /path/to/client/repo
+```
+
+This automatically:
+1. ✅ Collects evidence from client repo
+2. ✅ Builds AI prompts  
+3. ✅ Creates minimal transfer package (metadata only)
+4. ✅ Shows exactly what will be transferred
+5. ✅ Prepares compressed package with checksum
+
+### What Gets Transferred
+- ✅ `collection-summary.json` - Repository metadata
+- ✅ `adr-synthesis-prompt.md` - AI analysis prompt
+- ✅ `adr-review-prompt.md` - AI review prompt  
+- ✅ `README.md` - Project documentation (if present)
+- ✅ `package.json` - Package metadata (if present)
+
+### What Does NOT Get Transferred
+- ❌ Source code files
+- ❌ Business logic or algorithms
+- ❌ Sensitive configuration
+- ❌ Intellectual property
+
+### Transfer Methods
+```bash
+# After secure-transfer.sh runs, you get:
+secure-transfer-client-name-20240315.tar.gz
+secure-transfer-client-name-20240315.tar.gz.sha256
+
+# Transfer via client-approved method:
+# - USB drive (most secure)
+# - Internal GitLab/GitHub Enterprise  
+# - Client-approved cloud storage
+
+# Verify integrity on your machine:
+sha256sum -c secure-transfer-client-name-20240315.tar.gz.sha256
+tar -xzf secure-transfer-client-name-20240315.tar.gz
+```
+
+## �📞 Need Help?
 
 - **Full documentation**: See README.md for comprehensive guide
 - **Testing**: Run `cd tools && make test` to verify everything works

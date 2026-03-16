@@ -24,7 +24,9 @@ echo "📥 Downloading core files..."
 # Scripts
 curl -sSL "https://raw.githubusercontent.com/$REPO/$BRANCH/scripts/collect-agentrc.sh" -o "$TOOLS_DIR/collect-agentrc.sh"
 curl -sSL "https://raw.githubusercontent.com/$REPO/$BRANCH/scripts/build-strong-model-prompt.mjs" -o "$TOOLS_DIR/build-strong-model-prompt.mjs"
+curl -sSL "https://raw.githubusercontent.com/$REPO/$BRANCH/scripts/secure-transfer.sh" -o "$TOOLS_DIR/secure-transfer.sh"
 chmod +x "$TOOLS_DIR/collect-agentrc.sh"
+chmod +x "$TOOLS_DIR/secure-transfer.sh"
 
 # Templates
 mkdir -p "$TOOLS_DIR/templates"
@@ -80,5 +82,6 @@ echo ""
 echo "📋 Next steps:"
 echo "   cd tools && make test                    # Verify everything works"
 echo "   ./scripts/collect-agentrc.sh . ../collections/\$(basename \"\$PWD\")  # Collect evidence"
+echo "   ./scripts/secure-transfer.sh .           # Secure transfer for locked-down clients"
 echo ""
 echo "📚 For full documentation: https://github.com/$REPO#$BRANCH"

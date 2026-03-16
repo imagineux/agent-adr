@@ -1,0 +1,220 @@
+#!/usr/bin/env bash
+# Secure transfer script for client environments
+# Creates minimal transfer package and prepares for secure data transfer
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Usage info
+usage() {
+    echo "Secure Transfer Script for Client Environments"
+    echo ""
+    echo "Usage: $0 <client-repo-path> [collection-name]"
+    echo ""
+    echo "This script:"
+    echo "1. Runs evidence collection on client repo"
+    echo "2. Builds prompts for analysis"
+    echo "3. Creates minimal transfer package (metadata only)"
+    echo "4. Shows exactly what will be transferred"
+    echo "5. Prepares package for secure transfer"
+    echo ""
+    echo "Examples:"
+    echo "  $0 /path/to/client/repo"
+    echo "  $0 /path/to/client/repo my-project"
+    echo ""
+    echo "The transfer package will contain only:"
+    echo "  - collection-summary.json (repository metadata)"
+    echo "  - adr-synthesis-prompt.md (AI prompt)"
+    echo "  - adr-review-prompt.md (AI review prompt)"
+    echo "  - README.md (if present in client repo)"
+    echo "  - package.json (package metadata only)"
+    echo ""
+    echo "NO source code or intellectual property is transferred."
+}
+
+# Logging functions
+log_info() { echo -e "${GREEN}[INFO]${NC} $*"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
+log_step() { echo -e "${BLUE}[STEP]${NC} $*"; }
+
+# Check arguments
+if [ $# -lt 1 ]; then
+    usage
+    exit 1
+fi
+
+CLIENT_REPO="$1"
+COLLECTION_NAME="${2:-$(basename "$CLIENT_REPO")}"
+COLLECTION_DIR="./collections/$COLLECTION_NAME"
+TRANSFER_DIR="./transfer-$COLLECTION_NAME"
+
+# Validate client repo
+if [ ! -d "$CLIENT_REPO" ]; then
+    log_error "Client repository not found: $CLIENT_REPO"
+    exit 1
+fi
+
+log_info "🔒 Starting secure transfer workflow for: $COLLECTION_NAME"
+log_info "📁 Client repo: $CLIENT_REPO"
+
+# Step 1: Run evidence collection
+log_step "Step 1: Collecting evidence from client repository..."
+mkdir -p ./collections
+"$SCRIPT_DIR/collect-agentrc.sh" "$CLIENT_REPO" "$COLLECTION_DIR"
+
+if [ ! -d "$COLLECTION_DIR" ]; then
+    log_error "Collection failed - no output directory created"
+    exit 1
+fi
+
+log_info "✅ Collection completed: $COLLECTION_DIR"
+
+# Step 2: Build prompts
+log_step "Step 2: Building analysis prompts..."
+node "$SCRIPT_DIR/build-strong-model-prompt.mjs" \
+    --collection "$COLLECTION_DIR" \
+    --out "$COLLECTION_DIR/prompts"
+
+if [ ! -d "$COLLECTION_DIR/prompts" ]; then
+    log_error "Prompt building failed"
+    exit 1
+fi
+
+log_info "✅ Prompts built: $COLLECTION_DIR/prompts"
+
+# Step 3: Create minimal transfer package
+log_step "Step 3: Creating minimal transfer package..."
+mkdir -p "$TRANSFER_DIR"
+
+# Always include these files
+cp "$COLLECTION_DIR/collection-summary.json" "$TRANSFER_DIR/"
+cp "$COLLECTION_DIR/prompts/adr-synthesis-prompt.md" "$TRANSFER_DIR/"
+cp "$COLLECTION_DIR/prompts/adr-review-prompt.md" "$TRANSFER_DIR/"
+
+# Include context files if they exist (safe metadata only)
+if [ -f "$COLLECTION_DIR/context/README.md" ]; then
+    cp "$COLLECTION_DIR/context/README.md" "$TRANSFER_DIR/"
+fi
+
+if [ -f "$COLLECTION_DIR/context/package.json" ]; then
+    cp "$COLLECTION_DIR/context/package.json" "$TRANSFER_DIR/"
+fi
+
+# Create transfer manifest
+cat > "$TRANSFER_DIR/TRANSFER_MANIFEST.md" <<MANIFEST
+# Secure Transfer Manifest
+
+**Client:** $COLLECTION_NAME  
+**Date:** $(date +%Y-%m-%d)  
+**Purpose:** AI enablement evidence collection  
+
+## What This Contains
+
+This package contains ONLY metadata and prompts - **no source code**:
+
+| File | Purpose | Contains |
+|------|---------|----------|
+| collection-summary.json | Repository analysis results | Metadata about repo structure, languages, frameworks |
+| adr-synthesis-prompt.md | AI model prompt | Structured prompt for AI analysis |
+| adr-review-prompt.md | AI review prompt | Quality assurance prompt |
+| README.md | Project documentation | Client's project README (if present) |
+| package.json | Package metadata | Node.js package information (if present) |
+
+## What This Does NOT Contain
+
+- ❌ Source code files (.js, .py, .java, etc.)
+- ❌ Business logic or algorithms  
+- ❌ Sensitive configuration files
+- ❌ Intellectual property
+- ❌ Database schemas or credentials
+
+## Security Verification
+
+The files in this package are safe to transfer because they contain only:
+1. **Structural metadata** (file names, package info)
+2. **Generated prompts** (text templates for AI models)
+3. **Public documentation** (README files)
+
+## Next Steps
+
+1. Review the files below to confirm content is appropriate
+2. Transfer using client-approved method (USB, internal repo, etc.)
+3. Use prompts with AI models to generate ADR
+4. Deliver results back via same secure method
+
+---
+
+*Generated by agent-adr secure transfer workflow*
+MANIFEST
+
+log_info "✅ Transfer package created: $TRANSFER_DIR"
+
+# Step 4: Show exactly what will be transferred
+log_step "Step 4: Review transfer contents..."
+echo ""
+log_info "🔍 CONTENTS TO BE TRANSFERRED:"
+echo "=================================="
+
+for file in "$TRANSFER_DIR"/*; do
+    if [ -f "$file" ]; then
+        filename="$(basename "$file")"
+        echo ""
+        echo -e "${BLUE}=== $filename ===${NC}"
+        
+        # Show first few lines to give context
+        if command -v head >/dev/null 2>&1; then
+            head -10 "$file"
+            if [ $(wc -l < "$file") -gt 10 ]; then
+                echo "... ($(wc -l < "$file") total lines)"
+            fi
+        else
+            cat "$file"
+        fi
+    fi
+done
+
+echo ""
+echo "=================================="
+
+# Step 5: Create transfer package
+log_step "Step 5: Preparing final transfer package..."
+
+# Create compressed package
+PACKAGE_NAME="secure-transfer-$COLLECTION_NAME-$(date +%Y%m%d).tar.gz"
+tar -czf "$PACKAGE_NAME" -C . "$TRANSFER_DIR"
+
+# Create checksum for integrity verification
+sha256sum "$PACKAGE_NAME" > "$PACKAGE_NAME.sha256"
+
+log_info "✅ Transfer package created: $PACKAGE_NAME"
+log_info "🔐 Checksum: $PACKAGE_NAME.sha256"
+
+# Final instructions
+echo ""
+log_info "🎉 SECURE TRANSFER READY!"
+echo ""
+echo "📋 NEXT STEPS:"
+echo "1. Review the contents above to confirm appropriateness"
+echo "2. Transfer the package using client-approved method:"
+echo "   - USB drive (most secure)"
+echo "   - Internal GitLab/GitHub Enterprise"
+echo "   - Client-approved cloud storage"
+echo "3. On your machine, verify integrity:"
+echo "   sha256sum -c $PACKAGE_NAME.sha256"
+echo "4. Extract and use prompts for AI analysis:"
+echo "   tar -xzf $PACKAGE_NAME"
+echo "5. Deliver ADR results back via same secure method"
+echo ""
+echo "📁 Package location: $(pwd)/$PACKAGE_NAME"
+echo "📏 Package size: $(du -h "$PACKAGE_NAME" | cut -f1)"
+echo ""
+log_warn "⚠️  Remember: This contains only metadata and prompts - no source code!"
