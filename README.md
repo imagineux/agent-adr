@@ -5,16 +5,15 @@ A minimal operator utility for collecting repository evidence with [`microsoft/a
 ## Quick Start
 
 ```bash
-# 1. Clone and setup
-git clone https://github.com/imagineux/agent-adr.git
-cd agent-adr
-nvm install lts-* && nvm use
+# 1. Install globally
+npm install -g github:imagineux/agent-adr
 
-# 2. Run collection and copy to clipboard
-./collect-and-prompt.sh /path/to/client/repo ../collections/client-name
+# 2. Run collection (local or remote)
+agent-adr /path/to/client/repo --output ../collections/client-name
+agent-adr microsoft/vscode --output ../collections/vscode
 
-# 3. Paste into Kimi K2.5
-# Prompt is automatically in your clipboard
+# 3. Paste into your preferred advanced AI model
+# Copy the prompt from: ../collections/client-name/prompts/adr-synthesis-prompt.md
 ```
 
 For restricted environments with certificate issues, the git clone method works reliably where curl-based installations fail.
@@ -50,55 +49,77 @@ We do **not** delegate final recommendations or ADR authorship to `agentrc`.
 
 ## Workflow model
 
-1. **Run single command** using `./collect-and-prompt.sh`
-2. **Prompt automatically copied** to clipboard
-3. **Paste into Kimi K2.5** for synthesis
-4. **Review and deliver** repo-specific AI enablement ADR
+1. **Install globally** - `npm install -g github:imagineux/agent-adr`
+2. **Run single command** using `agent-adr --output`
+3. **Prompt saved to output directory** - Ready to copy/paste
+4. **Paste into your preferred advanced AI model** for synthesis
+5. **Review and deliver** repo-specific AI enablement ADR
 
 ## Prerequisites
 
 - Bash
-- Node.js (LTS - use `nvm install lts-*` to install the latest LTS version)
-- `npx` able to run `github:microsoft/agentrc`
-- `python3` (required by agentrc for some operations)
+- Node.js 18+ (use `nvm install 18` to install)
+- npm (comes with Node.js)
+- git (for cloning remote repos)
+
+## Installation
+
+```bash
+# Global installation (recommended)
+npm install -g github:imagineux/agent-adr
+
+# Or local development setup
+git clone https://github.com/imagineux/agent-adr.git
+cd agent-adr
+npm install
+```
 
 ## Happy path
 
 ```bash
-# Clone and setup (one-time)
-git clone https://github.com/imagineux/agent-adr.git
-cd agent-adr
-nvm install lts-* && nvm use
+# Global installation - one time setup
+npm install -g github:imagineux/agent-adr
 
-# Collect artifacts and copy prompt to clipboard
-./collect-and-prompt.sh /path/to/target/repo ../collections/target-repo-name
+# Collect artifacts and generate prompt
+agent-adr /path/to/target/repo --output ../collections/target-repo-name
 
-# Paste into Kimi K2.5 - prompt is ready in your clipboard
+# Copy prompt from output directory - ready to paste into your preferred advanced AI model
 ```
 
 ## Core script
 
-### `collect-and-prompt.sh`
+### `agent-adr` (global command)
 
 Usage:
 ```bash
-./collect-and-prompt.sh /path/to/client/repo ../collections/client-repo-name [model]
+agent-adr /path/to/client/repo --output ../collections/client-repo-name [model] [timeout]
+agent-adr owner/repo --output ../collections/client-repo-name [model] [timeout]  # GitHub remote
+agent-adr https://github.com/owner/repo --output ../collections/client-repo-name [model] [timeout]
+
+Arguments:
+  repo-path           Local path or GitHub repository (owner/repo or full URL)
+  --output OUTPUT     Output directory for collection artifacts and prompts
+  model               AI model to use (default: gpt-5-mini)
+  timeout             Timeout per command in seconds (default: 300)
 ```
+
+Remote repos are automatically cloned to a temporary directory for analysis.
 
 What it does:
 - Validates Node.js environment
 - Enforces `AGENTRC_DEBUG_COPILOT=1`
 - Preserves `AGENTRC_COPILOT_CLI_PATH` if provided
 - Overrides model for instruction flow (default: `gpt-5-mini`)
+- Clones remote repos to temporary directories (auto-cleanup)
 - Captures stdout/stderr/exit/status for analyze/readiness/probes/generation attempts
 - Copies context files best-effort
 - **Builds synthesis prompt in memory using Node.js**
-- **Copies final prompt directly to clipboard**
-- Aborts if output directory would be inside the client repo
+- **Saves prompt to file for easy copy/paste**
+- Aborts if output directory would be inside the client repo (local repos only)
 
 Outputs:
-- **Prompt copied to clipboard** - Ready for Kimi K2.5 synthesis
-- `prompts/adr-synthesis-prompt.md` - Backup copy of prompt
+- **Prompt saved to file** - Ready for any advanced AI model synthesis
+- `prompts/adr-synthesis-prompt.md` - Complete synthesis prompt
 - Complete collection artifacts in `../collections/client-repo-name/`
 
 ## Safety and Hardening
@@ -141,10 +162,22 @@ This works in all environments, including those with certificate restrictions wh
 
 **Single command does everything:**
 ```bash
-./collect-and-prompt.sh /path/to/repo ../collections/repo-name
+# Local repository
+agent-adr /path/to/repo --output ../collections/repo-name
+
+# GitHub repository (owner/repo format)
+agent-adr microsoft/vscode --output ../collections/vscode
+
+# Full GitHub URL
+agent-adr https://github.com/microsoft/vscode --output ../collections/vscode
+
+# Custom model and timeout
+agent-adr microsoft/vscode --output ../collections/vscode gpt-4o 600
 ```
 
-The prompt will be automatically copied to your clipboard, ready for Kimi K2.5.
+Remote repos are automatically cloned to temporary directories and cleaned up afterward.
+
+The prompt will be saved to `../collections/repo-name/prompts/adr-synthesis-prompt.md`, ready for any advanced AI model.
 
 ## AI Enablement Framework
 

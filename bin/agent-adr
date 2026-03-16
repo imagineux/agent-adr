@@ -1,28 +1,48 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# Unified agent-adr collector: bash collection + Node.js prompt building + clipboard transfer
+# Unified agent-adr collector: bash collection + Node.js prompt building
 # - External collection bundle (outside client repo)
 # - Artifact collection with optional low-tier generation
 # - Four dry-run probes + two real generation attempts
 # - In-memory prompt building with template replacement
-# - Direct clipboard transfer for Kimi K2.5
+# - Saves prompt to file for easy copy/paste
 
 usage() {
   cat <<'USAGE'
 Usage:
-  ./collect-and-prompt.sh /path/to/client/repo ./collections/client-repo-name [model]
+  agent-adr /path/to/client/repo --output ../collections/client-repo-name [model] [timeout]
+  agent-adr owner/repo --output ../collections/client-repo-name [model] [timeout]  # GitHub remote
+  agent-adr https://github.com/owner/repo --output ../collections/client-repo-name [model] [timeout]
 
-Defaults:
-  model = gpt-5-mini
+Note: Remote repos are automatically cloned to a temporary directory for analysis.
+
+Arguments:
+  repo-path           Local path or GitHub repository (owner/repo or full URL)
+  --output OUTPUT     Output directory for collection artifacts and prompts
+  model               AI model to use (default: gpt-5-mini)
+  timeout             Timeout per command in seconds (default: 300)
 
 Prerequisites:
-  - Node.js (LTS recommended)
-  - npx (comes with Node.js)
-  - microsoft/agentrc accessible via npx
+  - Node.js 18+ (use `nvm install 18` to install)
+  - npm (comes with Node.js)
+  - git (for cloning remote repos)
 
 Environment Setup:
-  nvm install lts-* && nvm use
+  npm install -g github:imagineux/agent-adr
+
+Examples:
+  # Local repository
+  agent-adr ./my-repo --output ../collections/my-repo
+  
+  # GitHub repository (owner/repo format)
+  agent-adr microsoft/vscode --output ../collections/vscode
+  
+  # Full GitHub URL
+  agent-adr https://github.com/microsoft/vscode --output ../collections/vscode
+  
+  # Custom model and timeout
+  agent-adr microsoft/vscode --output ../collections/vscode gpt-4o 600
 USAGE
 }
 
@@ -31,10 +51,27 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   exit 0
 fi
 
-if [ "$#" -lt 2 ]; then
+if [ "$#" -lt 3 ]; then
   usage
   exit 1
 fi
+
+# Parse arguments
+REPO_PATH_INPUT="$1"
+shift
+
+if [ "$1" != "--output" ]; then
+  echo "ERROR: --output flag is required" >&2
+  usage
+  exit 1
+fi
+
+shift
+OUT_ROOT_INPUT="$1"
+shift
+
+MODEL="${1:-gpt-5-mini}"
+TIMEOUT="${2:-300}"
 
 # Validate Node.js environment early
 if ! command -v node >/dev/null 2>&1; then
@@ -51,7 +88,7 @@ if ! command -v npx >/dev/null 2>&1; then
 fi
 
 # Check Node.js version against .nvmrc if it exists
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NVMRC_FILE="$SCRIPT_DIR/.nvmrc"
 if [ -f "$NVMRC_FILE" ]; then
   NVMRC_CONTENT="$(cat "$NVMRC_FILE")"
@@ -75,18 +112,51 @@ if [ -f "$NVMRC_FILE" ]; then
   fi
 fi
 
-# Validate and canonicalize paths before any real work
-REPO_PATH_INPUT="$1"
-OUT_ROOT_INPUT="$2"
-MODEL="${3:-gpt-5-mini}"
-
 # --- Path validation and canonicalization ---
-# Resolve REPO_PATH to absolute path
-if [ ! -d "$REPO_PATH_INPUT" ]; then
-  echo "ERROR: repo path does not exist: $REPO_PATH_INPUT" >&2
+# Handle remote repos (GitHub owner/repo or full URL) vs local repos
+TEMP_REPO_DIR=""
+CLEANUP_TEMP_DIR=""
+
+if [[ "$REPO_PATH_INPUT" =~ ^https://github\.com/ ]]; then
+  # Full GitHub URL - extract owner/repo
+  REPO_IDENTIFIER="$(echo "$REPO_PATH_INPUT" | sed 's|https://github\.com/||' | sed 's|\.git$||')"
+  REPO_URL="$REPO_PATH_INPUT"
+  IS_REMOTE=true
+elif [[ "$REPO_PATH_INPUT" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; then
+  # owner/repo format
+  REPO_IDENTIFIER="$REPO_PATH_INPUT"
+  REPO_URL="https://github.com/$REPO_PATH_INPUT"
+  IS_REMOTE=true
+elif [ -d "$REPO_PATH_INPUT" ]; then
+  # Local directory
+  REPO_PATH="$(cd "$REPO_PATH_INPUT" && pwd)"
+  IS_REMOTE=false
+else
+  echo "ERROR: repo path does not exist and is not a valid GitHub remote: $REPO_PATH_INPUT" >&2
   exit 1
 fi
-REPO_PATH="$(cd "$REPO_PATH_INPUT" && pwd)"
+
+# Clone remote repos to temporary directory
+if [ "$IS_REMOTE" = true ]; then
+  echo "🌐 Remote repository detected: $REPO_IDENTIFIER"
+  echo "📥 Cloning to temporary directory..."
+  
+  # Create temporary directory for cloning
+  TEMP_REPO_DIR="$(mktemp -d)"
+  CLEANUP_TEMP_DIR="$TEMP_REPO_DIR"
+  
+  # Clone the repository
+  if ! git clone "$REPO_URL" "$TEMP_REPO_DIR" 2>/dev/null; then
+    echo "❌ Failed to clone repository: $REPO_URL" >&2
+    rm -rf "$TEMP_REPO_DIR"
+    exit 1
+  fi
+  
+  echo "✅ Repository cloned successfully"
+  REPO_PATH="$TEMP_REPO_DIR"
+else
+  echo "📁 Local repository detected: $REPO_PATH"
+fi
 
 # Resolve OUT_ROOT to absolute path
 mkdir -p "$OUT_ROOT_INPUT" || { echo "ERROR: cannot create output directory: $OUT_ROOT_INPUT" >&2; exit 1; }
@@ -94,6 +164,7 @@ OUT="$(cd "$OUT_ROOT_INPUT" && pwd)"
 
 # --- Repo boundary safety guard ---
 # Ensure output root is NOT inside the client repo (prevent accidental repo contamination)
+# Skip for remote repos since they're in temporary directories
 is_path_inside() {
   local child="$1"
   local parent="$2"
@@ -106,12 +177,23 @@ is_path_inside() {
   esac
 }
 
-if is_path_inside "$OUT" "$REPO_PATH"; then
+if [ "$IS_REMOTE" = false ] && is_path_inside "$OUT" "$REPO_PATH"; then
   echo "ERROR: output root is inside the client repo. This is disallowed to prevent repo contamination." >&2
   echo "  Repo: $REPO_PATH" >&2
   echo "  Output: $OUT" >&2
   exit 1
 fi
+
+# Cleanup function to remove temporary directory
+cleanup_temp_dir() {
+  if [ -n "$CLEANUP_TEMP_DIR" ] && [ -d "$CLEANUP_TEMP_DIR" ]; then
+    echo "🧹 Cleaning up temporary directory: $CLEANUP_TEMP_DIR"
+    rm -rf "$CLEANUP_TEMP_DIR"
+  fi
+}
+
+# Set trap for cleanup on script exit
+trap cleanup_temp_dir EXIT
 
 TS_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 HOSTNAME_VAL="$(hostname 2>/dev/null || true)"
@@ -162,30 +244,73 @@ cmd_to_string() {
 }
 
 capture_cmd() {
-  local name="$1"
-  shift
-  local stdout_file="$1"
-  local stderr_file="$2"
-  local status_file="$3"
-  shift 3
-
-  local start_ts exit_code end_ts
-  start_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-  run_in_repo "$stdout_file" "$stderr_file" "$@"
-  exit_code=$?
-
-  end_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  local cmd_str
-  cmd_str="$(cmd_to_string "$@")"
+  local name="$1" stdout_file="$2" stderr_file="$3" status_file="$4"
+  shift 4
+  local cmd_str="$(cmd_to_string "$@")"
+  echo "🔍 Running: $name"
+  echo "   Command: $cmd_str"
+  
+  # Run with timeout and progress indicator
+  local start_time=$(date +%s)
+  
+  (
+    # Background process with timeout
+    (
+      run_in_repo "$stdout_file" "$stderr_file" "$@"
+      echo $? > "$status_file.tmp"
+    ) &
+    local pid=$!
+    
+    # Show progress while waiting
+    while kill -0 $pid 2>/dev/null; do
+      local elapsed=$(($(date +%s) - start_time))
+      if [ $elapsed -gt $TIMEOUT ]; then
+        echo "⏰ Timeout after ${TIMEOUT}s - killing process..."
+        kill $pid 2>/dev/null || true
+        wait $pid 2>/dev/null || true
+        echo "timeout" > "$status_file.tmp"
+        break
+      fi
+      echo "⏳ Running... (${elapsed}s elapsed)"
+      sleep 10
+    done
+    
+    wait $pid 2>/dev/null || true
+  )
+  
+  # Read status and write final status file
+  local exit_code=0
+  if [ -f "$status_file.tmp" ]; then
+    local status_content="$(cat "$status_file.tmp")"
+    if [ "$status_content" = "timeout" ]; then
+      exit_code=124  # timeout exit code
+      echo "⏰ $name: TIMED OUT after ${TIMEOUT}s"
+    else
+      exit_code="$status_content"
+    fi
+    rm -f "$status_file.tmp"
+  else
+    exit_code=$?
+  fi
+  
+  # Write status metadata
   write_json_file "$status_file" "{
-  \"name\": $(json_escape "$name"),
-  \"command\": $(json_escape "$cmd_str"),
-  \"start\": $(json_escape "$start_ts"),
-  \"end\": $(json_escape "$end_ts"),
-  \"exitCode\": $exit_code
-}"
-  return 0
+    \"command\": $(json_escape "$cmd_str"),
+    \"exitCode\": $exit_code,
+    \"timestamp\": $(json_escape "$(date -u +%Y-%m-%dT%H:%M:%SZ)"),
+    \"stdoutFile\": $(json_escape "$stdout_file"),
+    \"stderrFile\": $(json_escape "$stderr_file")
+  }"
+  
+  if [ $exit_code -eq 0 ]; then
+    echo "✅ $name: SUCCESS"
+  elif [ $exit_code -eq 124 ]; then
+    echo "⏰ $name: TIMEOUT"
+    return 124
+  else
+    echo "❌ $name: FAILED (exit code: $exit_code)"
+    return $exit_code
+  fi
 }
 
 capture_probe() {
@@ -276,11 +401,12 @@ copy_if_exists() {
   fi
 }
 
-export AGENTRC_DEBUG_COPILOT=1
-[ -n "$COPILOT_OVERRIDE" ] && export AGENTRC_COPILOT_CLI_PATH="$COPILOT_OVERRIDE"
-
 GIT_SHA=""
-command -v git >/dev/null 2>&1 && GIT_SHA="$(git -C "$REPO_PATH" rev-parse HEAD 2>/dev/null || true)"
+if [ "$IS_REMOTE" = true ]; then
+  GIT_SHA="$(git -C "$REPO_PATH" rev-parse HEAD 2>/dev/null || echo "unknown")"
+else
+  command -v git >/dev/null 2>&1 && GIT_SHA="$(git -C "$REPO_PATH" rev-parse HEAD 2>/dev/null || true)"
+fi
 
 # --- Build command arrays (argv-based, safe for special characters) ---
 cmd_analyze=(npx github:microsoft/agentrc analyze --json --output "$OUT/analyze.json")
@@ -294,6 +420,9 @@ cmd_gen_nested=(npx github:microsoft/agentrc instructions --strategy nested --ou
 
 write_json_file "$OUT/metadata/run.json" "{
   \"repoPath\": $(json_escape "$REPO_PATH"),
+  \"repoIdentifier\": $(json_escape "${REPO_IDENTIFIER:-}"),
+  \"repoUrl\": $(json_escape "${REPO_URL:-}"),
+  \"isRemote\": $IS_REMOTE,
   \"repoGitSha\": $(json_escape "$GIT_SHA"),
   \"outputPath\": $(json_escape "$OUT"),
   \"timestamp\": $(json_escape "$TS_UTC"),
@@ -303,20 +432,41 @@ write_json_file "$OUT/metadata/run.json" "{
 # --- Execute collection (best-effort, continues on failure) ---
 OVERALL_SUCCESS=true
 
+echo "🚀 Starting collection for: ${REPO_IDENTIFIER:-$REPO_PATH}"
+echo "📁 Output directory: $OUT"
+echo "⏱️  Timeout per command: ${TIMEOUT}s"
+echo "🤖 Using model: $MODEL"
+if [ "$IS_REMOTE" = true ]; then
+  echo "🌐 Remote repo URL: $REPO_URL"
+fi
+echo ""
+
 # Required analyze/readiness: still capture status/log even on failure
 capture_cmd "analyze" "$OUT/logs/analyze.stdout.log" "$OUT/logs/analyze.stderr.log" "$OUT/metadata/analyze-status.json" "${cmd_analyze[@]}" || { OVERALL_SUCCESS=false; true; }
-capture_cmd "readiness" "$OUT/logs/readiness.stdout.log" "$OUT/logs/readiness.stderr.log" "$OUT/metadata/readiness-status.json" "${cmd_readiness[@]}" || { OVERALL_SUCCESS=false; true; }
+echo ""
 
+capture_cmd "readiness" "$OUT/logs/readiness.stdout.log" "$OUT/logs/readiness.stderr.log" "$OUT/metadata/readiness-status.json" "${cmd_readiness[@]}" || { OVERALL_SUCCESS=false; true; }
+echo ""
+
+echo "🔍 Running probes (dry-run instruction generation)..."
 # Probes: continue on failure, track if any failed
 capture_probe "flat-root" "${cmd_probe_flat_root[@]}" || { OVERALL_SUCCESS=false; true; }
+echo ""
 capture_probe "flat-areas" "${cmd_probe_flat_areas[@]}" || { OVERALL_SUCCESS=false; true; }
+echo ""
 capture_probe "nested-root" "${cmd_probe_nested_root[@]}" || { OVERALL_SUCCESS=false; true; }
+echo ""
 capture_probe "nested-areas" "${cmd_probe_nested_areas[@]}" || { OVERALL_SUCCESS=false; true; }
+echo ""
 
+echo "🔧 Running real instruction generation..."
 # Real generations: continue on failure, track output existence
 capture_generation "flat-root" "$OUT/generated/flat-root/copilot-instructions.generated.md" "$OUT/generated/flat-root" "${cmd_gen_flat[@]}" || { OVERALL_SUCCESS=false; true; }
+echo ""
 capture_generation "nested-root" "$OUT/generated/nested-root/AGENTS.generated.md" "$OUT/generated/nested-root" "${cmd_gen_nested[@]}" || { OVERALL_SUCCESS=false; true; }
+echo ""
 
+echo "📋 Copying context files..."
 # Copy context files
 copy_if_exists "README.md" "README.md"
 copy_if_exists "package.json" "package.json"
@@ -327,11 +477,13 @@ copy_if_exists "CLAUDE.md" "CLAUDE.md"
 copy_if_exists "CONTRIBUTING.md" "CONTRIBUTING.md"
 copy_if_exists "CODEOWNERS" "CODEOWNERS"
 copy_if_exists "SECURITY.md" "SECURITY.md"
+echo "✅ Context files copied"
 
 # --- Node.js prompt building (inline) ---
 echo "Building synthesis prompt in memory..."
 
 export SCRIPT_DIR="$SCRIPT_DIR"
+export OUT="$OUT"
 node <<'NODE_EOF'
 const fs = require('fs');
 const path = require('path');
@@ -436,11 +588,11 @@ ${g.output ?? '(missing)'}
 
 // Load templates
 const scriptDir = process.env.SCRIPT_DIR || path.dirname(process.argv[1]);
-const templateContent = readText(path.join(scriptDir, 'templates', kimi-k2_5-adr-synthesis-template.md'));
+const templateContent = readText(path.join(scriptDir, 'templates', 'adr-synthesis-template.md'));
 const adrTemplate = readText(path.join(scriptDir, 'templates', 'ai-enablement-adr-template.md')) || '';
 
 if (!templateContent) {
-  console.error('ERROR: Kimi K2.5 template not found');
+  console.error('ERROR: ADR synthesis template not found');
   process.exit(1);
 }
 
@@ -477,31 +629,7 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-# --- Clipboard transfer ---
-PROMPT_FILE="$OUT/prompts/adr-synthesis-prompt.md"
-
-if [ ! -f "$PROMPT_FILE" ]; then
-  echo "❌ Prompt file not found: $PROMPT_FILE" >&2
-  exit 1
-fi
-
-# Copy to clipboard based on OS
-if command -v pbcopy >/dev/null 2>&1; then
-  cat "$PROMPT_FILE" | pbcopy
-  echo "✅ Prompt copied to clipboard (macOS)"
-elif command -v xclip >/dev/null 2>&1; then
-  cat "$PROMPT_FILE" | xclip -selection clipboard
-  echo "✅ Prompt copied to clipboard (Linux)"
-elif command -v clip.exe >/dev/null 2>&1; then
-  cat "$PROMPT_FILE" | clip.exe
-  echo "✅ Prompt copied to clipboard (Windows)"
-else
-  echo "❌ No clipboard command found" >&2
-  echo "Install: macOS (built-in), Linux: sudo apt install xclip, Windows (built-in)" >&2
-  exit 1
-fi
-
-echo "🎯 Ready for Kimi K2.5: https://kimi.moonshot.cn/"
+echo "🎯 Ready for advanced AI model (paste from: $PROMPT_FILE)"
 echo "📁 Collection artifacts: $OUT"
 
 if [ "$OVERALL_SUCCESS" = true ]; then

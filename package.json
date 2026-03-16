@@ -1,0 +1,39 @@
+{
+  "name": "agent-adr",
+  "version": "1.0.0",
+  "description": "A minimal operator utility for collecting repository evidence with microsoft/agentrc and building high-quality ADR synthesis prompts",
+  "main": "bin/agent-adr",
+  "bin": {
+    "agent-adr": "./bin/agent-adr"
+  },
+  "scripts": {
+    "start": "./bin/agent-adr",
+    "install-deps": "npm install",
+    "test": "make test"
+  },
+  "keywords": [
+    "agentrc",
+    "adr",
+    "architecture-decision-record",
+    "ai-enablement",
+    "repository-analysis",
+    "copilot",
+    "synthesis"
+  ],
+  "author": "imagineux",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/imagineux/agent-adr.git"
+  },
+  "bugs": {
+    "url": "https://github.com/imagineux/agent-adr/issues"
+  },
+  "homepage": "https://github.com/imagineux/agent-adr#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@microsoft/agentrc": "^2.0.1-0"
+  }
+}
