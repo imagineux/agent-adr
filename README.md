@@ -2,11 +2,22 @@
 
 A minimal operator utility for collecting repository evidence with [`microsoft/agentrc`](https://github.com/microsoft/agentrc) and building a high-quality ADR synthesis prompt for stronger reasoning models.
 
-## Quick Start (Client Repo)
+## Quick Start
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/imagineux/agent-adr/main/install.sh | bash
+# 1. Clone and setup
+git clone https://github.com/imagineux/agent-adr.git
+cd agent-adr
+nvm install lts-* && nvm use
+
+# 2. Run collection
+./scripts/collect-agentrc.sh /path/to/client/repo ./collections/client-name
+
+# 3. Get results
+cat ./collections/client-name/prompts/adr-synthesis-prompt.md
 ```
+
+For restricted environments with certificate issues, the git clone method works reliably where curl-based installations fail.
 
 See [USAGE.md](USAGE.md) for complete step-by-step guide.
 
@@ -48,23 +59,22 @@ We do **not** delegate final recommendations or ADR authorship to `agentrc`.
 ## Prerequisites
 
 - Bash
-- Node.js (for prompt builder; stdlib only)
+- Node.js (LTS - use `nvm install lts-*` to install the latest LTS version)
 - `npx` able to run `github:microsoft/agentrc`
 
 ## Happy path
 
 ```bash
-# 1) Collect artifacts from a target repo into a separate directory
+# Clone and setup (one-time)
+git clone https://github.com/imagineux/agent-adr.git
+cd agent-adr
+nvm install lts-* && nvm use
+
+# Collect artifacts from a target repo into a separate directory
 ./scripts/collect-agentrc.sh /path/to/target/repo ./collections/target-repo-name
 
-# 2) Build synthesis prompts from the collection
-./scripts/build-strong-model-prompt.mjs --collection ./collections/target-repo-name --out ./collections/target-repo-name/prompts
-
-# 3) Use the generated prompts with a strong model
-cat ./collections/target-repo-name/prompts/adr-synthesis-prompt.md | pbcopy
-# Then paste into Kimi K2.5, SWE-1.5, GPT-5.4 Pro, etc.
-# 5) Optionally run review prompt against first-pass ADR
-# 6) Review generated ADR, refine if needed, deliver
+# Results are ready in:
+# ./collections/target-repo-name/prompts/adr-synthesis-prompt.md
 ```
 
 ## Safety and Hardening
@@ -86,20 +96,24 @@ Usage:
 ```
 
 What it does:
+- Validates Node.js environment
 - Enforces `AGENTRC_DEBUG_COPILOT=1`
 - Preserves `AGENTRC_COPILOT_CLI_PATH` if provided
 - Overrides model for instruction flow (default: `gpt-5-mini`)
 - Captures stdout/stderr/exit/status for analyze/readiness/probes/generation attempts
 - Copies context files best-effort
+- Builds synthesis prompts automatically
 - Writes summary + notes
 - Aborts if output directory would be inside the client repo
 
+Outputs:
+- `prompts/adr-synthesis-prompt.md` - Ready for strong model synthesis
+- `prompts/adr-review-prompt.md` - For reviewing first-pass ADR
+- Complete collection artifacts in `./collections/client-repo-name/`
+
 ### `scripts/build-strong-model-prompt.mjs`
 
-Usage:
-```bash
-node scripts/build-strong-model-prompt.mjs --collection ./collections/client-repo-name --out ./collections/client-repo-name/prompts
-```
+*Note: This script is called automatically by `collect-agentrc.sh` - you don't need to run it manually.*
 
 What it does:
 - Loads collection artifacts and context
@@ -213,15 +227,15 @@ This section helps deploy agent-adr in target environments for evidence collecti
 
 ### Quick Start
 
-**For immediate use in client repo:**
+**For all environments (including certificate-restricted):**
 ```bash
-curl -sSL https://raw.githubusercontent.com/imagineux/agent-adr/main/install.sh | bash
+git clone https://github.com/imagineux/agent-adr.git
+cd agent-adr
+nvm install lts-* && nvm use
+./scripts/collect-agentrc.sh /path/to/client/repo ./collections/client-name
 ```
 
-**For locked-down environments (Clipboard to private Gist):**
-```bash
-./tools/scripts/clipboard-transfer.sh ./collections/repo-name
-```
+**Results:** `./collections/client-name/prompts/adr-synthesis-prompt.md`
 
 See [USAGE.md](USAGE.md) for complete step-by-step guide.
 

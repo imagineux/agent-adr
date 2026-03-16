@@ -15,6 +15,14 @@ Usage:
 
 Defaults:
   model = gpt-5-mini
+
+Prerequisites:
+  - Node.js (LTS recommended)
+  - npx (comes with Node.js)
+  - microsoft/agentrc accessible via npx
+
+Environment Setup:
+  nvm install lts-* && nvm use
 USAGE
 }
 
@@ -26,6 +34,45 @@ fi
 if [ "$#" -lt 2 ]; then
   usage
   exit 1
+fi
+
+# Validate Node.js environment early
+if ! command -v node >/dev/null 2>&1; then
+  echo "ERROR: Node.js not found. Please install Node.js using nvm:" >&2
+  echo "  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash" >&2
+  echo "  nvm install lts-* && nvm use" >&2
+  exit 1
+fi
+
+if ! command -v npx >/dev/null 2>&1; then
+  echo "ERROR: npx not found. Please ensure Node.js/npm is properly installed:" >&2
+  echo "  nvm install lts-* && nvm use" >&2
+  exit 1
+fi
+
+# Check Node.js version against .nvmrc if it exists
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NVMRC_FILE="$SCRIPT_DIR/../.nvmrc"
+if [ -f "$NVMRC_FILE" ]; then
+  NVMRC_CONTENT="$(cat "$NVMRC_FILE")"
+  if [ "$NVMRC_CONTENT" = "lts-*" ]; then
+    # For LTS, just ensure we have a reasonably recent Node.js version
+    CURRENT_NODE_VERSION="$(node --version | sed 's/v//' | cut -d. -f1)"
+    if [ "$CURRENT_NODE_VERSION" -lt 18 ]; then
+      echo "ERROR: Node.js version $(node --version) is too old for LTS requirement. Please use Node.js 18+" >&2
+      echo "  Run: nvm install lts-* && nvm use" >&2
+      exit 1
+    fi
+  else
+    # For specific version requirements
+    REQUIRED_NODE_VERSION="$NVMRC_CONTENT"
+    CURRENT_NODE_VERSION="$(node --version | sed 's/v//' | cut -d. -f1)"
+    if [ "$CURRENT_NODE_VERSION" -lt "$REQUIRED_NODE_VERSION" ]; then
+      echo "ERROR: Node.js version $(node --version) is too old. Required: v$REQUIRED_NODE_VERSION+" >&2
+      echo "  Run: nvm install lts-* && nvm use" >&2
+      exit 1
+    fi
+  fi
 fi
 
 # Validate and canonicalize paths before any real work
@@ -416,10 +463,33 @@ cat > "$OUT/notes.md" <<'NOTES'
 - Commands are executed via argv arrays, not string eval, for shell-safety.
 NOTES
 
+# --- Build synthesis prompts automatically ---
+PROMPT_BUILDER="$SCRIPT_DIR/build-strong-model-prompt.mjs"
+PROMPTS_DIR="$OUT/prompts"
+
+echo "Building synthesis prompts..."
+if [ -f "$PROMPT_BUILDER" ]; then
+  if node "$PROMPT_BUILDER" --collection "$OUT" --out "$PROMPTS_DIR" 2>/dev/null; then
+    echo "✅ Synthesis prompts built successfully: $PROMPTS_DIR"
+    echo "📋 Ready for AI model: $PROMPTS_DIR/adr-synthesis-prompt.md"
+  else
+    echo "⚠️  Prompt builder failed, but collection succeeded" >&2
+    echo "📋 Manual prompt building: node $PROMPT_BUILDER --collection $OUT --out $PROMPTS_DIR" >&2
+  fi
+else
+  echo "⚠️  Prompt builder not found at $PROMPT_BUILDER" >&2
+fi
+
 if [ "$OVERALL_SUCCESS" = true ]; then
-  echo "Collection completed successfully: $OUT"
+  echo "✅ Collection completed successfully: $OUT"
+  if [ -f "$PROMPTS_DIR/adr-synthesis-prompt.md" ]; then
+    echo "🎯 Results ready: $PROMPTS_DIR/adr-synthesis-prompt.md"
+  fi
   exit 0
 else
-  echo "Collection completed with failures: $OUT" >&2
+  echo "⚠️  Collection completed with failures: $OUT" >&2
+  if [ -f "$PROMPTS_DIR/adr-synthesis-prompt.md" ]; then
+    echo "🎯 Results available despite failures: $PROMPTS_DIR/adr-synthesis-prompt.md" >&2
+  fi
   exit 1
 fi
