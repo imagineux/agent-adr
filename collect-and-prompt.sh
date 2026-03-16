@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# Hardened collection wrapper around microsoft/agentrc
+# Unified agent-adr collector: bash collection + Node.js prompt building + clipboard transfer
 # - External collection bundle (outside client repo)
 # - Artifact collection with optional low-tier generation
 # - Four dry-run probes + two real generation attempts
-# - Diagnostics capture
-# - Outputs for adr-synthesis-prompt.md and adr-review-prompt.md
+# - In-memory prompt building with template replacement
+# - Direct clipboard transfer for Kimi K2.5
 
 usage() {
   cat <<'USAGE'
 Usage:
-  ./scripts/collect-agentrc.sh /path/to/client/repo ./collections/client-repo-name [model]
+  ./collect-and-prompt.sh /path/to/client/repo ./collections/client-repo-name [model]
 
 Defaults:
   model = gpt-5-mini
@@ -52,7 +52,7 @@ fi
 
 # Check Node.js version against .nvmrc if it exists
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NVMRC_FILE="$SCRIPT_DIR/../.nvmrc"
+NVMRC_FILE="$SCRIPT_DIR/.nvmrc"
 if [ -f "$NVMRC_FILE" ]; then
   NVMRC_CONTENT="$(cat "$NVMRC_FILE")"
   if [ "$NVMRC_CONTENT" = "lts-*" ]; then
@@ -112,6 +112,7 @@ if is_path_inside "$OUT" "$REPO_PATH"; then
   echo "  Output: $OUT" >&2
   exit 1
 fi
+
 TS_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 HOSTNAME_VAL="$(hostname 2>/dev/null || true)"
 UNAME_VAL="$(uname -a 2>/dev/null || true)"
@@ -138,8 +139,6 @@ sha256_file() {
 }
 
 # Run a command in the repo directory with proper env, capturing outputs
-# Usage: run_in_repo <stdout_file> <stderr_file> <command> [args...]
-# Returns: exit code from command
 run_in_repo() {
   local stdout_file="$1"
   local stderr_file="$2"
@@ -154,7 +153,6 @@ run_in_repo() {
 }
 
 # Render a command to string for logging/metadata (argv -> string)
-# Uses printf %q for safe shell-quoting of each argument
 cmd_to_string() {
   local out=""
   for arg in "$@"; do
@@ -270,19 +268,6 @@ capture_generation() {
   return 0
 }
 
-capture_diag_cmd() {
-  local name="$1"
-  shift
-  local safe
-  safe="$(printf '%s' "$name" | tr ' /' '__')"
-  capture_cmd "diag:$name" "$OUT/logs/diag-${safe}.stdout.log" "$OUT/logs/diag-${safe}.stderr.log" "$OUT/metadata/diag-${safe}.status.json" "$@"
-}
-
-probe_exit_code() {
-  [ -f "$1" ] && python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("exitCode",1))' "$1" 2>/dev/null || echo 1
-}
-status_bool() { [ "$1" = "0" ] && echo true || echo false; }
-
 copy_if_exists() {
   local src="$1" dest="$2"
   if [ -e "$REPO_PATH/$src" ]; then
@@ -298,7 +283,6 @@ GIT_SHA=""
 command -v git >/dev/null 2>&1 && GIT_SHA="$(git -C "$REPO_PATH" rev-parse HEAD 2>/dev/null || true)"
 
 # --- Build command arrays (argv-based, safe for special characters) ---
-# Note: agentrc command via npx
 cmd_analyze=(npx github:microsoft/agentrc analyze --json --output "$OUT/analyze.json")
 cmd_readiness=(npx github:microsoft/agentrc readiness --json --output "$OUT/readiness.json")
 cmd_probe_flat_root=(npx github:microsoft/agentrc instructions --dry-run --json --model "$MODEL")
@@ -316,40 +300,7 @@ write_json_file "$OUT/metadata/run.json" "{
   \"model\": $(json_escape "$MODEL")
 }"
 
-write_json_file "$OUT/metadata/environment.json" "{
-  \"timestamp\": $(json_escape "$TS_UTC"),
-  \"hostname\": $(json_escape "$HOSTNAME_VAL"),
-  \"uname\": $(json_escape "$UNAME_VAL"),
-  \"shell\": $(json_escape "$SHELL_NAME"),
-  \"runner\": \"bash\",
-  \"nodeVersion\": $(json_escape "$NODE_VERSION"),
-  \"npxPath\": $(json_escape "$NPX_PATH"),
-  \"copilotOnPath\": $([ -n "$COPILOT_PATH" ] && echo true || echo false),
-  \"copilotPath\": $(json_escape "$COPILOT_PATH"),
-  \"agentrcCopilotOverridePath\": $(json_escape "$COPILOT_OVERRIDE"),
-  \"agentrcDebugCopilot\": true
-}"
-
-# Render commands for metadata (as strings)
-ANALYZE_CMD_STR="$(cmd_to_string "${cmd_analyze[@]}")"
-READINESS_CMD_STR="$(cmd_to_string "${cmd_readiness[@]}")"
-P_FLAT_ROOT_STR="$(cmd_to_string "${cmd_probe_flat_root[@]}")"
-P_FLAT_AREAS_STR="$(cmd_to_string "${cmd_probe_flat_areas[@]}")"
-P_NESTED_ROOT_STR="$(cmd_to_string "${cmd_probe_nested_root[@]}")"
-P_NESTED_AREAS_STR="$(cmd_to_string "${cmd_probe_nested_areas[@]}")"
-G_FLAT_STR="$(cmd_to_string "${cmd_gen_flat[@]}")"
-G_NESTED_STR="$(cmd_to_string "${cmd_gen_nested[@]}")"
-
-write_json_file "$OUT/metadata/commands.json" "{
-  \"usesNpxGithubMicrosoftAgentrc\": true,
-  \"analyze\": $(json_escape "$ANALYZE_CMD_STR"),
-  \"readiness\": $(json_escape "$READINESS_CMD_STR"),
-  \"probes\": [$(json_escape "$P_FLAT_ROOT_STR"), $(json_escape "$P_FLAT_AREAS_STR"), $(json_escape "$P_NESTED_ROOT_STR"), $(json_escape "$P_NESTED_AREAS_STR")],
-  \"generations\": [$(json_escape "$G_FLAT_STR"), $(json_escape "$G_NESTED_STR")]
-}"
-
 # --- Execute collection (best-effort, continues on failure) ---
-# Track overall success - any critical failure causes exit 1
 OVERALL_SUCCESS=true
 
 # Required analyze/readiness: still capture status/log even on failure
@@ -366,130 +317,197 @@ capture_probe "nested-areas" "${cmd_probe_nested_areas[@]}" || { OVERALL_SUCCESS
 capture_generation "flat-root" "$OUT/generated/flat-root/copilot-instructions.generated.md" "$OUT/generated/flat-root" "${cmd_gen_flat[@]}" || { OVERALL_SUCCESS=false; true; }
 capture_generation "nested-root" "$OUT/generated/nested-root/AGENTS.generated.md" "$OUT/generated/nested-root" "${cmd_gen_nested[@]}" || { OVERALL_SUCCESS=false; true; }
 
-capture_diag_cmd "copilot-version" copilot --version || true
-capture_diag_cmd "copilot-help" copilot --help || true
-[ -n "$COPILOT_OVERRIDE" ] && capture_diag_cmd "override-version" "$COPILOT_OVERRIDE" --version || true
-[ -n "$COPILOT_OVERRIDE" ] && capture_diag_cmd "override-headless-version" "$COPILOT_OVERRIDE" --headless --version || true
-[ -n "$COPILOT_PATH" ] && capture_diag_cmd "copilot-headless-version" "$COPILOT_PATH" --headless --version || true
-
+# Copy context files
 copy_if_exists "README.md" "README.md"
 copy_if_exists "package.json" "package.json"
-copy_if_exists "bun.lockb" "bun.lockb"
-copy_if_exists "bun.lock" "bun.lock"
-copy_if_exists "package-lock.json" "package-lock.json"
-copy_if_exists "pnpm-lock.yaml" "pnpm-lock.yaml"
-copy_if_exists "yarn.lock" "yarn.lock"
 copy_if_exists "tsconfig.json" "tsconfig.json"
 copy_if_exists ".github/copilot-instructions.md" ".github/copilot-instructions.md"
 copy_if_exists "AGENTS.md" "AGENTS.md"
 copy_if_exists "CLAUDE.md" "CLAUDE.md"
-copy_if_exists ".github/instructions" ".github/instructions"
 copy_if_exists "CONTRIBUTING.md" "CONTRIBUTING.md"
 copy_if_exists "CODEOWNERS" "CODEOWNERS"
 copy_if_exists "SECURITY.md" "SECURITY.md"
-copy_if_exists "docs/adr" "docs/adr"
-copy_if_exists "docs/architecture" "docs/architecture"
-copy_if_exists "docs/" "docs/"
 
-FR_CODE="$(probe_exit_code "$OUT/probes/flat-root/status.json")"
-FA_CODE="$(probe_exit_code "$OUT/probes/flat-areas/status.json")"
-NR_CODE="$(probe_exit_code "$OUT/probes/nested-root/status.json")"
-NA_CODE="$(probe_exit_code "$OUT/probes/nested-areas/status.json")"
-GF_CODE="$(probe_exit_code "$OUT/generated/flat-root/status.json")"
-GN_CODE="$(probe_exit_code "$OUT/generated/nested-root/status.json")"
+# --- Node.js prompt building (inline) ---
+echo "Building synthesis prompt in memory..."
 
-ANY_GEN=false
-[ -f "$OUT/generated/flat-root/copilot-instructions.generated.md" ] && ANY_GEN=true
-[ -f "$OUT/generated/nested-root/AGENTS.generated.md" ] && ANY_GEN=true
+export SCRIPT_DIR="$SCRIPT_DIR"
+node <<'NODE_EOF'
+const fs = require('fs');
+const path = require('path');
 
-write_json_file "$OUT/collection-summary.json" "{
-  \"timestamp\": $(json_escape "$(date -u +%Y-%m-%dT%H:%M:%SZ)"),
-  \"repoPath\": $(json_escape "$REPO_PATH"),
-  \"model\": $(json_escape "$MODEL"),
-  \"copilotOnPath\": $([ -n "$COPILOT_PATH" ] && echo true || echo false),
-  \"copilotPath\": $(json_escape "$COPILOT_PATH"),
-  \"copilotOverridePath\": $(json_escape "$COPILOT_OVERRIDE"),
-  \"dryRun\": {
-    \"flatRoot\": {\"exitCode\": $FR_CODE, \"success\": $(status_bool "$FR_CODE")},
-    \"flatAreas\": {\"exitCode\": $FA_CODE, \"success\": $(status_bool "$FA_CODE")},
-    \"nestedRoot\": {\"exitCode\": $NR_CODE, \"success\": $(status_bool "$NR_CODE")},
-    \"nestedAreas\": {\"exitCode\": $NA_CODE, \"success\": $(status_bool "$NA_CODE")}
+// Get collection directory from environment
+const collectionDir = process.env.OUT;
+if (!collectionDir) {
+  console.error('ERROR: OUT environment variable not set');
+  process.exit(1);
+}
+
+// Helper functions
+function readText(file) {
+  try { return fs.readFileSync(file, 'utf8'); } catch { return null; }
+}
+
+function readJson(file) {
+  const t = readText(file);
+  if (!t) return null;
+  try { return JSON.parse(t); } catch { return null; }
+}
+
+function snippet(text, max = 1600) {
+  if (!text) return '(missing)';
+  return text.length > max ? `${text.slice(0, max)}\n...[truncated]` : text;
+}
+
+function fencedJson(obj) {
+  if (!obj) return '```json\nnull\n```';
+  return `\`\`\`json\n${JSON.stringify(obj, null, 2)}\n\`\`\``;
+}
+
+// Load collection artifacts
+const files = {
+  analyze: path.join(collectionDir, 'analyze.json'),
+  readiness: path.join(collectionDir, 'readiness.json'),
+  summary: path.join(collectionDir, 'collection-summary.json'),
+  overview: path.join(collectionDir, 'instructions-overview.md')
+};
+
+// Load probe and generation data
+const probes = [
+  {
+    name: 'flat-root',
+    status: readJson(path.join(collectionDir, 'probes', 'flat-root', 'status.json')),
+    stderr: readText(path.join(collectionDir, 'probes', 'flat-root', 'stderr.log')),
   },
-  \"generation\": {
-    \"flatRoot\": {\"exitCode\": $GF_CODE, \"success\": $(status_bool "$GF_CODE"), \"outputExists\": $([ -f "$OUT/generated/flat-root/copilot-instructions.generated.md" ] && echo true || echo false)},
-    \"nestedRoot\": {\"exitCode\": $GN_CODE, \"success\": $(status_bool "$GN_CODE"), \"outputExists\": $([ -f "$OUT/generated/nested-root/AGENTS.generated.md" ] && echo true || echo false)}
+  {
+    name: 'flat-areas',
+    status: readJson(path.join(collectionDir, 'probes', 'flat-areas', 'status.json')),
+    stderr: readText(path.join(collectionDir, 'probes', 'flat-areas', 'stderr.log')),
   },
-  \"anyGeneratedOutput\": $ANY_GEN
-}"
+  {
+    name: 'nested-root',
+    status: readJson(path.join(collectionDir, 'probes', 'nested-root', 'status.json')),
+    stderr: readText(path.join(collectionDir, 'probes', 'nested-root', 'stderr.log')),
+  },
+  {
+    name: 'nested-areas',
+    status: readJson(path.join(collectionDir, 'probes', 'nested-areas', 'status.json')),
+    stderr: readText(path.join(collectionDir, 'probes', 'nested-areas', 'stderr.log')),
+  },
+];
 
-ERR_SNIPPETS="$(find "$OUT" -type f \( -name 'stderr.log' -o -name '*.stderr.log' \) -print 2>/dev/null | xargs -r cat 2>/dev/null | sed 's/^[[:space:]]*//' | sed '/^$/d' | sort | uniq -c | sort -nr | head -n 12 || true)"
+const generations = [
+  {
+    name: 'flat-root',
+    status: readJson(path.join(collectionDir, 'generated', 'flat-root', 'status.json')),
+    output: readText(path.join(collectionDir, 'generated', 'flat-root', 'copilot-instructions.generated.md')),
+    stderr: readText(path.join(collectionDir, 'generated', 'flat-root', 'stderr.log')),
+  },
+  {
+    name: 'nested-root',
+    status: readJson(path.join(collectionDir, 'generated', 'nested-root', 'status.json')),
+    output: readText(path.join(collectionDir, 'generated', 'nested-root', 'AGENTS.generated.md')),
+    stderr: readText(path.join(collectionDir, 'generated', 'nested-root', 'stderr.log')),
+  },
+];
 
-cat > "$OUT/instructions-overview.md" <<OVERVIEW
-# Instructions Collection Overview
+// Build context files section
+const contextCandidates = [
+  'README.md', 'package.json', 'tsconfig.json', 'AGENTS.md', 'CLAUDE.md', 'CONTRIBUTING.md', 'SECURITY.md',
+  '.github/copilot-instructions.md', 'CODEOWNERS',
+];
 
-## Model and CLI context
-- Model override used: $MODEL
-- Copilot CLI found on PATH: $([ -n "$COPILOT_PATH" ] && echo "yes ($COPILOT_PATH)" || echo "no")
-- AGENTRC_COPILOT_CLI_PATH override used: $([ -n "$COPILOT_OVERRIDE" ] && echo "yes ($COPILOT_OVERRIDE)" || echo "no")
+const contextItems = contextCandidates.map((rel) => {
+  const full = path.join(collectionDir, 'context', rel);
+  const content = readText(full);
+  return { rel, content };
+});
 
-## Dry-run probes
-- flat-root: exit $FR_CODE
-- flat-areas: exit $FA_CODE
-- nested-root: exit $NR_CODE
-- nested-areas: exit $NA_CODE
+const contextFilesMd = contextItems.map((c) => `### context/${c.rel}
+\`\`\`text
+${snippet(c.content, 1400)}
+\`\`\``).join('\n\n');
 
-## Real generation attempts
-- flat-root: exit $GF_CODE, output exists: $([ -f "$OUT/generated/flat-root/copilot-instructions.generated.md" ] && echo yes || echo no)
-- nested-root: exit $GN_CODE, output exists: $([ -f "$OUT/generated/nested-root/AGENTS.generated.md" ] && echo yes || echo no)
+// Build generated instructions section
+const generatedInstructionsMd = generations.map((g) => `### ${g.name}
+\`\`\`md
+${g.output ?? '(missing)'}
+\`\`\``).join('\n\n');
 
-## Common failure messages (best-effort)
-\`\`\`
-$ERR_SNIPPETS
-\`\`\`
+// Load templates
+const scriptDir = process.env.SCRIPT_DIR || path.dirname(process.argv[1]);
+const templateContent = readText(path.join(scriptDir, 'templates', kimi-k2_5-adr-synthesis-template.md'));
+const adrTemplate = readText(path.join(scriptDir, 'templates', 'ai-enablement-adr-template.md')) || '';
 
-## Any generated instruction file exists
-- $ANY_GEN
-OVERVIEW
+if (!templateContent) {
+  console.error('ERROR: Kimi K2.5 template not found');
+  process.exit(1);
+}
 
-cat > "$OUT/notes.md" <<'NOTES'
-# Notes
+// Replace template placeholders
+const synthesis = templateContent
+  .replace('{{COLLECTION_SUMMARY_JSON}}', JSON.stringify(readJson(files.summary), null, 2))
+  .replace('{{ANALYZE_JSON}}', JSON.stringify(readJson(files.analyze), null, 2))
+  .replace('{{READINESS_JSON}}', JSON.stringify(readJson(files.readiness), null, 2))
+  .replace('{{INSTRUCTIONS_STATUS_JSON}}', JSON.stringify(generations.find(g => g.name === 'flat-root')?.status || {}, null, 2))
+  .replace('{{GENERATED_INSTRUCTIONS_MD}}', generatedInstructionsMd)
+  .replace('{{COPIED_CONTEXT_FILES_MD}}', contextFilesMd)
+  .replace('{{EVALUATOR_NOTES_MD}}', `### Probe Results
+${probes.map((p) => `#### ${p.name}
+Status: ${fencedJson(p.status)}
+Stderr:
+\`\`\`text
+${snippet(p.stderr, 1200)}
+\`\`\``).join('\n\n')}`)
+  .replace('{{ADR_TEMPLATE_MD}}', adrTemplate);
 
-- Collection is best-effort and continues across failures.
-- Dry-run probes still exercise generation flow and are treated as probes, not no-op checks.
-- Readiness/analyze failures are retained in metadata and logs.
-- Generation failures preserve stderr, stdout, exit codes, and output file checks.
-- Missing files are explicitly marked as MISSING in synthesized prompts.
-- Repo boundary guard prevents accidental writes into the client repo.
-- Commands are executed via argv arrays, not string eval, for shell-safety.
-NOTES
+// Write prompt to file
+const promptsDir = path.join(collectionDir, 'prompts');
+fs.mkdirSync(promptsDir, { recursive: true });
+const promptFile = path.join(promptsDir, 'adr-synthesis-prompt.md');
+fs.writeFileSync(promptFile, synthesis);
 
-# --- Build synthesis prompts automatically ---
-PROMPT_BUILDER="$SCRIPT_DIR/build-strong-model-prompt.mjs"
-PROMPTS_DIR="$OUT/prompts"
+console.log(`✅ Synthesis prompt built: ${promptFile}`);
+console.log(`📋 Prompt length: ${synthesis.length} characters`);
+NODE_EOF
 
-echo "Building synthesis prompts..."
-if [ -f "$PROMPT_BUILDER" ]; then
-  if node "$PROMPT_BUILDER" --collection "$OUT" --out "$PROMPTS_DIR" 2>/dev/null; then
-    echo "✅ Synthesis prompts built successfully: $PROMPTS_DIR"
-    echo "📋 Ready for AI model: $PROMPTS_DIR/adr-synthesis-prompt.md"
-  else
-    echo "⚠️  Prompt builder failed, but collection succeeded" >&2
-    echo "📋 Manual prompt building: node $PROMPT_BUILDER --collection $OUT --out $PROMPTS_DIR" >&2
-  fi
-else
-  echo "⚠️  Prompt builder not found at $PROMPT_BUILDER" >&2
+# Check if Node.js prompt building succeeded
+if [ $? -ne 0 ]; then
+  echo "❌ Prompt building failed" >&2
+  exit 1
 fi
 
+# --- Clipboard transfer ---
+PROMPT_FILE="$OUT/prompts/adr-synthesis-prompt.md"
+
+if [ ! -f "$PROMPT_FILE" ]; then
+  echo "❌ Prompt file not found: $PROMPT_FILE" >&2
+  exit 1
+fi
+
+# Copy to clipboard based on OS
+if command -v pbcopy >/dev/null 2>&1; then
+  cat "$PROMPT_FILE" | pbcopy
+  echo "✅ Prompt copied to clipboard (macOS)"
+elif command -v xclip >/dev/null 2>&1; then
+  cat "$PROMPT_FILE" | xclip -selection clipboard
+  echo "✅ Prompt copied to clipboard (Linux)"
+elif command -v clip.exe >/dev/null 2>&1; then
+  cat "$PROMPT_FILE" | clip.exe
+  echo "✅ Prompt copied to clipboard (Windows)"
+else
+  echo "❌ No clipboard command found" >&2
+  echo "Install: macOS (built-in), Linux: sudo apt install xclip, Windows (built-in)" >&2
+  exit 1
+fi
+
+echo "🎯 Ready for Kimi K2.5: https://kimi.moonshot.cn/"
+echo "📁 Collection artifacts: $OUT"
+
 if [ "$OVERALL_SUCCESS" = true ]; then
-  echo "✅ Collection completed successfully: $OUT"
-  if [ -f "$PROMPTS_DIR/adr-synthesis-prompt.md" ]; then
-    echo "🎯 Results ready: $PROMPTS_DIR/adr-synthesis-prompt.md"
-  fi
+  echo "✅ Collection completed successfully"
   exit 0
 else
-  echo "⚠️  Collection completed with failures: $OUT" >&2
-  if [ -f "$PROMPTS_DIR/adr-synthesis-prompt.md" ]; then
-    echo "🎯 Results available despite failures: $PROMPTS_DIR/adr-synthesis-prompt.md" >&2
-  fi
+  echo "⚠️  Collection completed with some failures (check logs)" >&2
   exit 1
 fi

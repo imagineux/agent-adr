@@ -95,3 +95,5 @@ Describe trade-offs, including what becomes easier and what remains hard.
 ## Follow-Up Checkpoints
 
 Specify review checkpoints (e.g., 2 weeks, 6 weeks, quarter) and reassessment criteria.
+
+---

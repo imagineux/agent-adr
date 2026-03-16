@@ -1,4 +1,4 @@
-# agent-adr (thin `agentrc` wrapper)
+# agent-adr (single-script collector)
 
 A minimal operator utility for collecting repository evidence with [`microsoft/agentrc`](https://github.com/microsoft/agentrc) and building a high-quality ADR synthesis prompt for stronger reasoning models.
 
@@ -10,11 +10,11 @@ git clone https://github.com/imagineux/agent-adr.git
 cd agent-adr
 nvm install lts-* && nvm use
 
-# 2. Run collection
-./scripts/collect-agentrc.sh /path/to/client/repo ./collections/client-name
+# 2. Run collection and copy to clipboard
+./collect-and-prompt.sh /path/to/client/repo ../collections/client-name
 
-# 3. Get results
-cat ./collections/client-name/prompts/adr-synthesis-prompt.md
+# 3. Paste into Kimi K2.5
+# Prompt is automatically in your clipboard
 ```
 
 For restricted environments with certificate issues, the git clone method works reliably where curl-based installations fail.
@@ -50,17 +50,17 @@ We do **not** delegate final recommendations or ADR authorship to `agentrc`.
 
 ## Workflow model
 
-1. **Collect in target environment** using `scripts/collect-agentrc.sh`.
-2. Review output artifacts and logs.
-3. **Synthesize in your environment** with `scripts/build-strong-model-prompt.mjs`.
-4. Paste prompt into a stronger model (Kimi K2.5, SWE-1.5, GPT-5.4 Pro, etc.).
-5. Review and deliver a repo-specific AI enablement ADR.
+1. **Run single command** using `./collect-and-prompt.sh`
+2. **Prompt automatically copied** to clipboard
+3. **Paste into Kimi K2.5** for synthesis
+4. **Review and deliver** repo-specific AI enablement ADR
 
 ## Prerequisites
 
 - Bash
 - Node.js (LTS - use `nvm install lts-*` to install the latest LTS version)
 - `npx` able to run `github:microsoft/agentrc`
+- `python3` (required by agentrc for some operations)
 
 ## Happy path
 
@@ -70,29 +70,19 @@ git clone https://github.com/imagineux/agent-adr.git
 cd agent-adr
 nvm install lts-* && nvm use
 
-# Collect artifacts from a target repo into a separate directory
-./scripts/collect-agentrc.sh /path/to/target/repo ./collections/target-repo-name
+# Collect artifacts and copy prompt to clipboard
+./collect-and-prompt.sh /path/to/target/repo ../collections/target-repo-name
 
-# Results are ready in:
-# ./collections/target-repo-name/prompts/adr-synthesis-prompt.md
+# Paste into Kimi K2.5 - prompt is ready in your clipboard
 ```
 
-## Safety and Hardening
+## Core script
 
-This wrapper has been hardened for enterprise use:
-
-- **Repo Boundary Guard**: Collection will abort if the output directory is inside the target repo (prevents accidental repo contamination)
-- **Argv-based Command Execution**: Commands are executed via arrays rather than string eval, making them safe for paths with spaces, `$`, backticks, or quotes
-- **Deterministic Smoke Tests**: Test harness with fake agentrc shim simulates success/failure scenarios
-- **Failure Robustness**: Collection continues across probe/generation failures; all artifacts produce status/log files even on failure
-
-## Core scripts
-
-### `scripts/collect-agentrc.sh`
+### `collect-and-prompt.sh`
 
 Usage:
 ```bash
-./scripts/collect-agentrc.sh /path/to/client/repo ./collections/client-repo-name
+./collect-and-prompt.sh /path/to/client/repo ../collections/client-repo-name [model]
 ```
 
 What it does:
@@ -102,28 +92,23 @@ What it does:
 - Overrides model for instruction flow (default: `gpt-5-mini`)
 - Captures stdout/stderr/exit/status for analyze/readiness/probes/generation attempts
 - Copies context files best-effort
-- Builds synthesis prompts automatically
-- Writes summary + notes
+- **Builds synthesis prompt in memory using Node.js**
+- **Copies final prompt directly to clipboard**
 - Aborts if output directory would be inside the client repo
 
 Outputs:
-- `prompts/adr-synthesis-prompt.md` - Ready for strong model synthesis
-- `prompts/adr-review-prompt.md` - For reviewing first-pass ADR
-- Complete collection artifacts in `./collections/client-repo-name/`
+- **Prompt copied to clipboard** - Ready for Kimi K2.5 synthesis
+- `prompts/adr-synthesis-prompt.md` - Backup copy of prompt
+- Complete collection artifacts in `../collections/client-repo-name/`
 
-### `scripts/build-strong-model-prompt.mjs`
+## Safety and Hardening
 
-*Note: This script is called automatically by `collect-agentrc.sh` - you don't need to run it manually.*
+This wrapper has been hardened for enterprise use:
 
-What it does:
-- Loads collection artifacts and context
-- Labels missing artifacts explicitly
-- Injects JSON and markdown into template placeholders
-- Produces deterministic final prompt files ready for strong-model synthesis
-
-Outputs:
-- `prompts/adr-synthesis-prompt.md`
-- `prompts/adr-review-prompt.md`
+- **Repo Boundary Guard**: Collection will abort if the output directory is inside the target repo (prevents accidental repo contamination)
+- **Argv-based Command Execution**: Commands are executed via arrays rather than string eval, making them safe for paths with spaces, `$`, backticks, or quotes
+- **Failure Robustness**: Collection continues across probe/generation failures; all artifacts produce status/log files even on failure
+- **In-Memory Processing**: Prompt building happens entirely in memory with no intermediate files
 
 ## Output artifacts
 
@@ -134,326 +119,66 @@ A typical collection includes:
 - `instructions-overview.md`
 - Probe and generation attempts with status/logs
 - `context/` (best-effort copied files)
-- `prompts/` (built synthesis and review prompts)
+- `prompts/adr-synthesis-prompt.md` (backup copy)
 
-See `examples/sample-collection-layout.md`.
+## Templates
 
-## Templates and skill
-
+- `templates/adr-synthesis-template.md` — synthesis prompt
 - `templates/ai-enablement-adr-template.md` — structured ADR output contract
-- `templates/strong-model-synthesis-template.md` — generic strong-model synthesis prompt
-- `templates/strong-model-review-template.md` — adversarial review prompt
-- `skills/compose-ai-enablement-adr.md` — reusable ADR composition skill/instructions
 
-## Testing
+## Installation
 
-The `tests/` directory contains comprehensive testing infrastructure:
-
-### Confidence Harness (Recommended)
-```bash
-# Run full confidence test suite
-./tests/smoke-test-confidence.sh
-
-# Keep artifacts for inspection
-KEEP_TEST_ARTIFACTS=1 ./tests/smoke-test-confidence.sh
-```
-
-**What the confidence harness proves:**
-- ✅ Wrapper collects artifacts correctly across all scenarios
-- ✅ Failures are preserved and surfaced in prompts  
-- ✅ Repo boundary guard prevents contamination
-- ✅ Paths with spaces/special characters work safely
-- ✅ Prompt builder handles missing/failure artifacts gracefully
-- ✅ Deterministic behavior (no randomness or external dependencies)
-
-**What it does NOT prove:**
-- ❌ Real `agentrc` behavior or output quality
-- ❌ Actual Copilot CLI integration
-- ❌ Network connectivity to AI services
-- ❌ Production environment performance
-
-### Test Scenarios Covered
-1. **Success Path**: Full successful collection with all probes and generations
-2. **Analyze Failure**: analyze fails but collection continues
-3. **Probe Failures**: dry-run probes fail but real generation succeeds  
-4. **Generation Failures**: real generation fails with proper error capture
-5. **Partial Output**: Generation creates file but reports failure
-6. **Network Errors**: Connectivity issues handled gracefully
-7. **Repo Boundary Guard**: Output inside repo is rejected
-8. **Path Safety**: Paths with spaces and special characters
-9. **Prompt Builder**: Both synthesis and review prompts generated correctly
-10. **Missing Files**: Failed generations marked as "(missing)" in prompts
-11. **Context Copying**: Context files copied when available
-12. **Deterministic Behavior**: Same inputs produce same outputs
-
-### Test Utilities
-- `test-utils.sh` - Common assertion and validation functions
-- `create-fixtures.sh` - Generate test repositories with different characteristics
-
-### Running Tests in CI
-```bash
-# CI-friendly execution (no artifacts kept)
-./tests/smoke-test-confidence.sh
-
-# Using Makefile (recommended)
-make test
-
-# With timeout for CI environments
-timeout 300 make test || exit 1
-
-# Keep artifacts for debugging
-KEEP_TEST_ARTIFACTS=1 make test
-make test-keep-artifacts
-```
-
-### Quick Test Commands
-```bash
-# Fast confidence check
-make test
-
-# Inspect test artifacts  
-make test-keep-artifacts
-ls -la /tmp/agent-adr-confidence-*/
-
-# Clean up
-make clean
-```
-
-All tests run in < 30 seconds without network dependencies, making them ideal for CI pipelines.
-
-## Deployment Guide
-
-This section helps deploy agent-adr in target environments for evidence collection and analysis.
-
-### Quick Start
-
-**For all environments (including certificate-restricted):**
+**Single blessed method: Git clone**
 ```bash
 git clone https://github.com/imagineux/agent-adr.git
 cd agent-adr
 nvm install lts-* && nvm use
-./scripts/collect-agentrc.sh /path/to/client/repo ./collections/client-name
 ```
 
-**Results:** `./collections/client-name/prompts/adr-synthesis-prompt.md`
+This works in all environments, including those with certificate restrictions where curl-based installers fail.
 
-See [USAGE.md](USAGE.md) for complete step-by-step guide.
+## Usage
 
-### Quick Setup Options
-
-**Option 1: Subtree (Repeat Deployments)**
+**Single command does everything:**
 ```bash
-# In target repo - integrates agent-adr as part of their codebase
-git subtree add --prefix=tools/agent-adr https://github.com/imagineux/agent-adr.git main --squash
-cd tools/agent-adr && make test && cd ../..
+./collect-and-prompt.sh /path/to/repo ../collections/repo-name
 ```
 
-**Option 2: Copy-and-Forget (One-off Assessments)**
-```bash
-# Simple copy - no Git complexity
-git clone https://github.com/imagineux/agent-adr.git /tmp/agent-adr
-cp -r /tmp/agent-adr/scripts /tmp/agent-adr/tests /tmp/agent-adr/templates /tmp/agent-adr/skills ./tools/
-cp /tmp/agent-adr/Makefile ./tools/
-echo "tools/" >> .gitignore
-rm -rf /tmp/agent-adr
-```
+The prompt will be automatically copied to your clipboard, ready for Kimi K2.5.
 
-**Option 3: Clipboard Transfer (Private Gist)**
-```bash
-# Perfect for private Gist creation with personal account
-./tools/scripts/clipboard-transfer.sh ./collections/repo-name
-# Copies formatted content to clipboard for private Gist pasting
-```
+## AI Enablement Framework
 
-### Choosing Your Deployment Method
+### 8-Layer Maturity Model
 
-| Method | Best For | Pros | Cons |
-|--------|----------|------|------|
-| **Subtree** | Repeat deployments, ongoing relationships | Version tracking, easy updates | Requires Git knowledge |
-| **Copy-and-Forget** | One-off assessments, security-conscious | Zero Git complexity, works offline | Manual updates required |
-| **Clipboard Transfer** | Private Gist creation, personal account | No CLI auth, immediate creation/deletion | Manual Gist creation |
-| **Gist-Only Transfer** | Public Gist, automatic creation | Cryptographic verification, approved access | Requires GitHub CLI |
+This tool uses an 8-layer framework to assess AI readiness:
 
-### Recommended Directory Structure
-```
-client-repo/
-├── src/
-├── package.json
-├── .gitignore  ← Contains "tools/" (if copy-and-forget)
-├── collect-evidence.sh  ← Simple wrapper (optional)
-└── tools/agent-adr/  ← Agent-ADR tools
-    ├── scripts/
-    ├── tests/
-    ├── templates/
-    ├── skills/
-    └── Makefile
-```
+1. **Repository & documentation basics** - Clean, well-documented codebase
+2. **Build/test reliability** - Consistent CI/CD and quality gates  
+3. **Work decomposition & task clarity** - Tasks broken into AI-assistable units
+4. **AI-facing instructions quality** - Clear, context-aware AI guidance
+5. **Evaluation and feedback loops** - Systematic assessment of AI output quality
+6. **Safe workflow automation** - Repeatable AI-augmented processes
+7. **Cross-tool integration** - AI capabilities connected across development stack
+8. **Adaptive/autonomous operation** - Learning and improvement loops
 
-### Verification Steps
-```bash
-# Test that everything works
-cd tools/agent-adr
-make test
+### Available AI Capabilities
 
-# Test collection on client repo
-cd ../..
-./tools/agent-adr/scripts/collect-agentrc.sh . ./collections/test-run
-ls -la ./collections/test-run/
-```
+| Capability | Description | Maturity Level Required |
+|------------|-------------|------------------------|
+| **Copilot CLI** | Command-line AI assistance for development tasks | Layer 3-4 |
+| **Copilot Instructions** | Repository-specific AI behavior guidance | Layer 4 |
+| **Prompting Skills** | Human-AI interaction patterns and techniques | Layer 3-5 |
+| **Evaluation Frameworks** | Systematic assessment of AI output quality | Layer 5-6 |
+| **GitHub Actions Hooks** | Automated workflow integration points | Layer 6-7 |
 
-## Client Workflow Strategy
+### Decision-Making Framework
 
-### Phase 1: Collection (On-site)
-```bash
-# 1. Quick confidence check
-make test
+When evaluating AI enablement investments:
 
-# 2. Collect evidence from client repo
-./tools/agent-adr/scripts/collect-agentrc.sh . ./collections/client-name
-
-# 3. Immediate inspection
-cat ./collections/client-name/collection-summary.json
-cat ./collections/client-name/instructions-overview.md
-```
-
-**What to look for:**
-- Generation success/failure patterns
-- Missing context files (quick wins)
-- Error patterns and blockers
-
-### Phase 2: Analysis (Your Environment)
-```bash
-# 4. Build prompts
-node ./tools/agent-adr/scripts/build-strong-model-prompt.mjs \
-  --collection ./collections/client-name \
-  --out ./collections/client-name/prompts
-
-# 5. Review prompt quality
-grep -A 5 -B 5 "missing\|failed\|error" ./collections/client-name/prompts/adr-synthesis-prompt.md
-```
-
-### Phase 3: Synthesis (Strong Model)
-- Paste `adr-synthesis-prompt.md` into Kimi K2.5/SWE-1.5/GPT-5.4 Pro
-- Get first-pass ADR
-- Review for evidence-based recommendations
-
-### Phase 4: Review (Quality Assurance)
-- Run `adr-review-prompt.md` against first-pass ADR
-- Incorporate adversarial feedback
-- Finalize recommendations
-
-## Maximizing Client Value
-
-### Evidence-Based Recommendations
-```bash
-# Use actual generated instructions as discussion starters
-cat ./collections/client-name/generated/flat-root/copilot-instructions.generated.md
-
-# Show concrete failure modes
-find ./collections/client-name -name "*.log" -exec grep -l "ERROR\|FAIL" {} \;
-
-# Highlight missing context as quick wins
-ls -la ./collections/client-name/context/
-```
-
-### Communication Strategy
-
-**Position as Evidence Collection, Not Assessment**
-- ✅ "We're collecting facts about your current setup"
-- ✅ "This uses your actual codebase, not generic templates"
-- ✅ "Failures are valuable diagnostics, not problems"
-
-**What to Emphasize**
-- Real context from their codebase
-- Concrete examples from their files
-- Practical, implementable next steps
-- Honest uncertainty where evidence is incomplete
-
-**What to Downplay**
-- Specific AI model capabilities
-- Technical implementation details
-- Perfect automation expectations
-
-### Success Indicators
-
-**Good Client Engagement**
-- Client asks "What would it take to fix X?"
-- Client wants to see generated instructions
-- Client shares results with their team
-- Client requests portfolio analysis
-
-**Red Flags**
-- Client focuses on tool limitations
-- Client expects instant AI solutions
-- Client wants to skip evidence review
-- Client has no context files to copy
-
-## Practical Tips & Tricks
-
-### Baseline Establishment
-```bash
-# Always collect before any AI enablement work
-./tools/agent-adr/scripts/collect-agentrc.sh . ./collections/baseline-$(date +%Y-%m-%d)
-
-# Use for comparison later
-diff -r ./collections/baseline-2024-01-01 ./collections/after-changes/
-```
-
-### Portfolio Analysis
-```bash
-# Run across multiple repos
-for repo in client-repo-1 client-repo-2 client-repo-3; do
-  cd ../$repo
-  ./tools/agent-adr/scripts/collect-agentrc.sh . ./collections/portfolio-analysis
-  cd -
-done
-
-# Compare patterns
-find . -name "collection-summary.json" -exec grep -l "anyGeneratedOutput.*true" {} \;
-```
-
-### Iterative Improvement
-```bash
-# Track progress over time
-./tools/agent-adr/scripts/collect-agentrc.sh . ./collections/iteration-1
-# ... make improvements ...
-./tools/agent-adr/scripts/collect-agentrc.sh . ./collections/iteration-2
-
-# Compare maturity progression
-jq '.dryRun.flatRoot.success' ./collections/iteration-1/collection-summary.json
-jq '.dryRun.flatRoot.success' ./collections/iteration-2/collection-summary.json
-```
-
-### Common Troubleshooting
-
-**Node.js Issues**
-```bash
-# Check Node version
-node --version  # Should be 16+
-
-# Install dependencies if needed
-npm install -g npx
-```
-
-**Permission Issues**
-```bash
-# Make scripts executable
-chmod +x tools/agent-adr/scripts/collect-agentrc.sh
-chmod +x tools/agent-adr/tests/smoke-test-confidence.sh
-```
-
-**Path Issues**
-```bash
-# Test with spaces in path
-mkdir -p "test with spaces"
-./tools/agent-adr/scripts/collect-agentrc.sh . "./collections/test with spaces"
-```
-
-## Design Principles
-
-- Small surface area
-- Explicit evidence handling
-- Honest uncertainty reporting
-- Constraint-first recommendations
-- No overengineering
-- Enterprise-safe operation
+| Factor | Weight | Questions to Ask |
+|--------|--------|------------------|
+| **Impact** | 30% | Does this significantly improve developer productivity or code quality? |
+| **Feasibility** | 25% | Do we have the skills and infrastructure to implement this effectively? |
+| **Risk** | 20% | What are the safety, security, or quality risks? |
+| **Cost** | 15% | What is the implementation and maintenance cost? |
+| **Strategic Alignment** | 10% | Does this support our broader technical and business goals? |
