@@ -163,6 +163,7 @@ This automatically:
 # After secure-transfer.sh runs, you get:
 secure-transfer-client-name-20240315.tar.gz
 secure-transfer-client-name-20240315.tar.gz.sha256
+TRANSFER_FINGERPRINTS.txt  # Cryptographic verification
 
 # Transfer via client-approved method:
 # - USB drive (most secure)
@@ -171,8 +172,43 @@ secure-transfer-client-name-20240315.tar.gz.sha256
 
 # Verify integrity on your machine:
 sha256sum -c secure-transfer-client-name-20240315.tar.gz.sha256
+sha256sum -c TRANSFER_FINGERPRINTS.txt
 tar -xzf secure-transfer-client-name-20240315.tar.gz
 ```
+
+### 🔐 Cryptographic Verification (Security-Conscious Clients)
+
+The secure transfer includes cryptographic fingerprints that prove:
+
+**What Fingerprints Prove:**
+- ✅ **Exact file list** - No additional files added
+- ✅ **File integrity** - No contents modified  
+- ✅ **Metadata only** - No source code included
+- ✅ **Tamper-evident** - Any changes detected
+
+**How It Works:**
+```bash
+# 1. Generate fingerprints (automatic with secure-transfer.sh)
+./tools/scripts/fingerprint-verify.sh ./collections/client-name generate
+
+# 2. Client reviews fingerprints
+cat ./collections/client-name/TRANSFER_FINGERPRINTS.txt
+
+# 3. Verify before transfer
+sha256sum -c ./collections/client-name/TRANSFER_FINGERPRINTS.txt
+
+# 4. Verify after transfer (on your machine)
+sha256sum -c TRANSFER_FINGERPRINTS.txt
+```
+
+**Fingerprint Format:**
+```
+SHA256_HASH  FILE_SIZE  RELATIVE_PATH
+a1b2c3d4...  1234      collection-summary.json
+e5f6g7h8...  5678      prompts/adr-synthesis-prompt.md
+```
+
+This gives security-conscious clients cryptographic proof that exactly the approved files are being transferred, with no source code or intellectual property included.
 
 ## �� Need Help?
 

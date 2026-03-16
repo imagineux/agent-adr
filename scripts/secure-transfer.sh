@@ -164,11 +164,32 @@ MANIFEST
 
 log_info "✅ Transfer package created: $TRANSFER_DIR"
 
-# Step 4: Show exactly what will be transferred
-log_step "Step 4: Review transfer contents..."
+# Step 4: Generate cryptographic fingerprints
+log_step "Step 4: Generating cryptographic fingerprints..."
+"$SCRIPT_DIR/fingerprint-verify.sh" "$COLLECTION_DIR" generate
+
+# Step 5: Show exactly what will be transferred
+log_step "Step 5: Review transfer contents and fingerprints..."
 echo ""
 log_info "🔍 CONTENTS TO BE TRANSFERRED:"
 echo "=================================="
+
+# Show fingerprint summary
+if [ -f "$COLLECTION_DIR/TRANSFER_FINGERPRINTS.txt" ]; then
+    echo "📊 FINGERPRINT VERIFICATION:"
+    grep '^[a-f0-9]' "$COLLECTION_DIR/TRANSFER_FINGERPRINTS.txt" | while read -r line; do
+        local hash=$(echo "$line" | cut -d' ' -f1)
+        local size=$(echo "$line" | cut -d' ' -f2)
+        local path=$(echo "$line" | cut -d' ' -f3-)
+        echo "  ✓ $path ($size bytes)"
+        echo "    Fingerprint: ${hash:0:12}..."
+    done
+else
+    log_warn "⚠️  Fingerprint file not found"
+fi
+
+echo ""
+echo "📁 FILE CONTENTS:"
 
 for file in "$TRANSFER_DIR"/*; do
     if [ -f "$file" ]; then
@@ -191,8 +212,16 @@ done
 echo ""
 echo "=================================="
 
-# Step 5: Create transfer package
-log_step "Step 5: Preparing final transfer package..."
+# Step 6: Create transfer package
+log_step "Step 6: Preparing final transfer package..."
+
+# Include fingerprint files in transfer
+if [ -f "$COLLECTION_DIR/TRANSFER_FINGERPRINTS.txt" ]; then
+    cp "$COLLECTION_DIR/TRANSFER_FINGERPRINTS.txt" "$TRANSFER_DIR/"
+fi
+if [ -f "$COLLECTION_DIR/TRANSFER_MANIFEST_WITH_FINGERPRINTS.md" ]; then
+    cp "$COLLECTION_DIR/TRANSFER_MANIFEST_WITH_FINGERPRINTS.md" "$TRANSFER_DIR/"
+fi
 
 # Create compressed package
 PACKAGE_NAME="secure-transfer-$COLLECTION_NAME-$(date +%Y%m%d).tar.gz"
@@ -203,6 +232,7 @@ sha256sum "$PACKAGE_NAME" > "$PACKAGE_NAME.sha256"
 
 log_info "✅ Transfer package created: $PACKAGE_NAME"
 log_info "🔐 Checksum: $PACKAGE_NAME.sha256"
+log_info "🔍 Fingerprints included for cryptographic verification"
 
 # Final instructions
 echo ""
@@ -210,17 +240,22 @@ log_info "🎉 SECURE TRANSFER READY!"
 echo ""
 echo "📋 NEXT STEPS:"
 echo "1. Review the contents above to confirm appropriateness"
-echo "2. Transfer the package using client-approved method:"
+echo "2. Verify cryptographic fingerprints:"
+echo "   sha256sum -c $COLLECTION_DIR/TRANSFER_FINGERPRINTS.txt"
+echo "3. Transfer the package using client-approved method:"
 echo "   - USB drive (most secure)"
 echo "   - Internal GitLab/GitHub Enterprise"
 echo "   - Client-approved cloud storage"
-echo "3. On your machine, verify integrity:"
+echo "4. On your machine, verify integrity:"
 echo "   sha256sum -c $PACKAGE_NAME.sha256"
-echo "4. Extract and use prompts for AI analysis:"
+echo "   sha256sum -c TRANSFER_FINGERPRINTS.txt"
+echo "5. Extract and use prompts for AI analysis:"
 echo "   tar -xzf $PACKAGE_NAME"
-echo "5. Deliver ADR results back via same secure method"
+echo "6. Deliver ADR results back via same secure method"
 echo ""
 echo "📁 Package location: $(pwd)/$PACKAGE_NAME"
 echo "📏 Package size: $(du -h "$PACKAGE_NAME" | cut -f1)"
+echo "🔐 Cryptographic verification: TRANSFER_FINGERPRINTS.txt included"
 echo ""
 log_warn "⚠️  Remember: This contains only metadata and prompts - no source code!"
+log_info "🔍 Fingerprints provide tamper-evident verification of transfer contents"
