@@ -14,16 +14,16 @@ See [USAGE.md](USAGE.md) for complete step-by-step guide.
 
 This repo is intentionally **thin**.
 
-- ✅ Uses `agentrc` as a scanner/collector in the **client environment**.
+- ✅ Uses `agentrc` as a scanner/collector in the target environment.
 - ✅ Optionally attempts `agentrc instructions` generation (best effort).
-- ✅ Stores all collected artifacts in a directory **outside** the client repo.
+- ✅ Stores all collected artifacts in a directory **outside** the target repo.
 - ✅ Builds a large, structured prompt bundle with our own synthesis templates.
 - ✅ Includes a reusable ADR template + synthesis skill.
 
 - ❌ Not a full CLI platform.
 - ❌ Not a reimplementation of `agentrc`.
 - ❌ Not coupled to the Copilot SDK.
-- ❌ Not writing into the client repo during normal collection.
+- ❌ Not writing into the target repo during normal collection.
 
 ## Why this exists
 
@@ -39,9 +39,9 @@ We do **not** delegate final recommendations or ADR authorship to `agentrc`.
 
 ## Workflow model
 
-1. **Collect in client environment** using `scripts/collect-agentrc.sh`.
+1. **Collect in target environment** using `scripts/collect-agentrc.sh`.
 2. Review output artifacts and logs.
-3. **Synthesize in our environment** with `scripts/build-strong-model-prompt.mjs`.
+3. **Synthesize in your environment** with `scripts/build-strong-model-prompt.mjs`.
 4. Paste prompt into a stronger model (Kimi K2.5, SWE-1.5, GPT-5.4 Pro, etc.).
 5. Review and deliver a repo-specific AI enablement ADR.
 
@@ -54,16 +54,15 @@ We do **not** delegate final recommendations or ADR authorship to `agentrc`.
 ## Happy path
 
 ```bash
-# 1) Collect artifacts from a client repo into a separate directory
-./scripts/collect-agentrc.sh /path/to/client/repo ./collections/client-repo-name
+# 1) Collect artifacts from a target repo into a separate directory
+./scripts/collect-agentrc.sh /path/to/target/repo ./collections/target-repo-name
 
-# 2) Inspect collection outputs
-find ./collections/client-repo-name -maxdepth 3 -type f | sort
+# 2) Build synthesis prompts from the collection
+./scripts/build-strong-model-prompt.mjs --collection ./collections/target-repo-name --out ./collections/target-repo-name/prompts
 
-# 3) Build strong-model prompts
-node scripts/build-strong-model-prompt.mjs --collection ./collections/client-repo-name --out ./collections/client-repo-name/prompts
-
-# 4) Paste synthesis prompt into Kimi / SWE / GPT-5.4 Pro
+# 3) Use the generated prompts with a strong model
+cat ./collections/target-repo-name/prompts/adr-synthesis-prompt.md | pbcopy
+# Then paste into Kimi K2.5, SWE-1.5, GPT-5.4 Pro, etc.
 # 5) Optionally run review prompt against first-pass ADR
 # 6) Review generated ADR, refine if needed, deliver
 ```
@@ -72,7 +71,7 @@ node scripts/build-strong-model-prompt.mjs --collection ./collections/client-rep
 
 This wrapper has been hardened for enterprise use:
 
-- **Repo Boundary Guard**: Collection will abort if the output directory is inside the client repo (prevents accidental repo contamination)
+- **Repo Boundary Guard**: Collection will abort if the output directory is inside the target repo (prevents accidental repo contamination)
 - **Argv-based Command Execution**: Commands are executed via arrays rather than string eval, making them safe for paths with spaces, `$`, backticks, or quotes
 - **Deterministic Smoke Tests**: Test harness with fake agentrc shim simulates success/failure scenarios
 - **Failure Robustness**: Collection continues across probe/generation failures; all artifacts produce status/log files even on failure
@@ -208,9 +207,9 @@ make clean
 
 All tests run in < 30 seconds without network dependencies, making them ideal for CI pipelines.
 
-## Client Deployment Guide
+## Deployment Guide
 
-This section helps consultants deploy agent-adr in client environments for maximum value.
+This section helps deploy agent-adr in target environments for evidence collection and analysis.
 
 ### Quick Start
 
@@ -219,13 +218,18 @@ This section helps consultants deploy agent-adr in client environments for maxim
 curl -sSL https://raw.githubusercontent.com/imagineux/agent-adr/main/install.sh | bash
 ```
 
+**For locked-down environments (Gist-only transfer):**
+```bash
+./tools/scripts/gist-transfer.sh ./collections/repo-name
+```
+
 See [USAGE.md](USAGE.md) for complete step-by-step guide.
 
 ### Quick Setup Options
 
-**Option 1: Subtree (Repeat Clients)**
+**Option 1: Subtree (Repeat Deployments)**
 ```bash
-# In client repo - integrates agent-adr as part of their codebase
+# In target repo - integrates agent-adr as part of their codebase
 git subtree add --prefix=tools/agent-adr https://github.com/imagineux/agent-adr.git main --squash
 cd tools/agent-adr && make test && cd ../..
 ```
@@ -240,29 +244,20 @@ echo "tools/" >> .gitignore
 rm -rf /tmp/agent-adr
 ```
 
-**Option 3: Simple Wrapper Script**
+**Option 3: Gist-Only Transfer (Locked-down Environments)**
 ```bash
-# Create client-friendly wrapper in repo root
-cat > collect-evidence.sh <<'SCRIPT'
-#!/usr/bin/env bash
-echo "🔍 Collecting AI enablement evidence..."
-./tools/agent-adr/scripts/collect-agentrc.sh . ./collections/$(basename "$PWD")
-echo "📊 Building analysis prompts..."
-node ./tools/agent-adr/scripts/build-strong-model-prompt.mjs \
-  --collection ./collections/$(basename "$PWD") \
-  --out ./collections/$(basename "$PWD")/prompts
-echo "✅ Collection complete! Check ./collections/$(basename "$PWD")"
-SCRIPT
-chmod +x collect-evidence.sh
+# Perfect for environments that only allow Gist transfers
+./tools/scripts/gist-transfer.sh ./collections/repo-name
+# Returns Gist URL for secure access
 ```
 
 ### Choosing Your Deployment Method
 
 | Method | Best For | Pros | Cons |
 |--------|----------|------|------|
-| **Subtree** | Repeat clients, ongoing relationships | Version tracking, easy updates | Requires Git knowledge |
+| **Subtree** | Repeat deployments, ongoing relationships | Version tracking, easy updates | Requires Git knowledge |
 | **Copy-and-Forget** | One-off assessments, security-conscious | Zero Git complexity, works offline | Manual updates required |
-| **Wrapper Script** | Simple client experience | One-command operation | Additional setup step |
+| **Gist-Only Transfer** | Locked-down environments, security-focused | Cryptographic verification, approved access | Requires GitHub CLI |
 
 ### Recommended Directory Structure
 ```

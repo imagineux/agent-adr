@@ -1,6 +1,6 @@
 # Quick Usage Guide
 
-Get agent-adr running in a client repository in 30 seconds.
+Get agent-adr running in a repository in 30 seconds.
 
 ## 🚀 Quick Start
 
@@ -35,7 +35,7 @@ cd ..
 
 ### Step 3: Collect Evidence
 ```bash
-# Run collection on the client repo
+# Run collection on the repository
 ./tools/scripts/collect-agentrc.sh . ./collections/$(basename "$PWD")
 
 # Example output:
@@ -128,21 +128,22 @@ echo "✅ Ready! Check ./collections/$(basename "$PWD")/prompts/"
 chmod +x ./tools/scripts/collect-agentrc.sh
 ```
 
-## � Secure Transfer (Locked-Down Clients)
+## 🔒 Gist Transfer (Locked-Down Environments)
 
-For clients who don't want data leaving their system:
+For environments where data cannot leave the system, Gist provides a secure transfer method:
 
-### One-Command Secure Workflow
+### One-Command Gist Workflow
 ```bash
-./tools/scripts/secure-transfer.sh /path/to/client/repo
+./tools/scripts/gist-transfer.sh ./collections/repo-name
 ```
 
 This automatically:
-1. ✅ Collects evidence from client repo
+1. ✅ Collects evidence from repository
 2. ✅ Builds AI prompts  
 3. ✅ Creates minimal transfer package (metadata only)
-4. ✅ Shows exactly what will be transferred
-5. ✅ Prepares compressed package with checksum
+4. ✅ Generates cryptographic fingerprints
+5. ✅ Creates GitHub Gist with all files
+6. ✅ Returns Gist URL for access
 
 ### What Gets Transferred
 - ✅ `collection-summary.json` - Repository metadata
@@ -151,6 +152,7 @@ This automatically:
 - ✅ `README.md` - Project documentation (if present)
 - ✅ `package.json` - Package metadata (if present)
 - ✅ `docs/` folder - Repository documentation, ADRs, API docs (if present)
+- ✅ `TRANSFER_FINGERPRINTS.txt` - Cryptographic verification
 
 ### What Does NOT Get Transferred
 - ❌ Source code files
@@ -158,105 +160,58 @@ This automatically:
 - ❌ Sensitive configuration
 - ❌ Intellectual property
 
-### Transfer Methods
+### Access Workflow
+1. **You run one command** → Get Gist URL
+2. **Open Gist URL** → Review metadata files
+3. **Download files** → Verify with fingerprints
+4. **Use prompts** → Get AI analysis
+5. **Delete Gist** → Security maintained
 
-**Option A: Gist Transfer (Recommended for Locked-Down Clients)**
-```bash
-./tools/scripts/gist-transfer.sh ./collections/client-name
-```
-
-This automatically:
-- ✅ Creates transfer package with metadata only
-- ✅ Generates cryptographic fingerprints
-- ✅ Creates GitHub Gist with all files
-- ✅ Provides Gist URL for client access
-- ✅ Includes verification instructions
-- ✅ Perfect for clients who only allow Gist transfers
-
-**Option B: Manual Transfer**
-```bash
-# After secure-transfer.sh runs, you get:
-secure-transfer-client-name-20240315.tar.gz
-secure-transfer-client-name-20240315.tar.gz.sha256
-TRANSFER_FINGERPRINTS.txt  # Cryptographic verification
-
-# Transfer via client-approved method:
-# - USB drive (most secure)
-# - Internal GitLab/GitHub Enterprise  
-# - Client-approved cloud storage
-
-# Verify integrity on your machine:
-sha256sum -c secure-transfer-client-name-20240315.tar.gz.sha256
-sha256sum -c TRANSFER_FINGERPRINTS.txt
-tar -xzf secure-transfer-client-name-20240315.tar.gz
-```
-
-### 🚀 Gist Transfer Workflow (Perfect for Locked-Down Clients)
-
-**One-Command Gist Creation:**
-```bash
-./tools/scripts/gist-transfer.sh ./collections/client-name
-```
-
-**What Happens Automatically:**
-1. ✅ Creates minimal transfer package (metadata only)
-2. ✅ Generates cryptographic fingerprints
-3. ✅ Creates GitHub Gist with all files
-4. ✅ Returns Gist URL for client
-5. ✅ Includes verification instructions
-
-**Client Instructions:**
-1. Open Gist URL in browser
-2. Review files (should be metadata only)
-3. Download all files
-4. Verify integrity: `sha256sum -c TRANSFER_FINGERPRINTS.txt`
-5. Use prompts for AI analysis
-6. Delete Gist after verification
-
-**Requirements:**
+### Requirements
 - GitHub CLI installed: `brew install gh`
 - Authenticated: `gh auth login`
 - Or GITHUB_TOKEN environment variable
 
-**Security Features:**
-- 🔐 Cryptographic fingerprints included
-- 📋 Clear file list verification
-- 🗑️ Auto-delete instructions
-- 🔍 Client can verify everything independently
+### 🔐 Cryptographic Verification
 
-### 🔐 Cryptographic Verification (Security-Conscious Clients)
-
-The secure transfer includes cryptographic fingerprints that prove:
-
-**What Fingerprints Prove:**
+**Fingerprints prove:**
 - ✅ **Exact file list** - No additional files added
 - ✅ **File integrity** - No contents modified  
 - ✅ **Metadata only** - No source code included
 - ✅ **Tamper-evident** - Any changes detected
 
-**How It Works:**
+**Verification:**
 ```bash
-# 1. Generate fingerprints (automatic with secure-transfer.sh)
-./tools/scripts/fingerprint-verify.sh ./collections/client-name generate
-
-# 2. Client reviews fingerprints
-cat ./collections/client-name/TRANSFER_FINGERPRINTS.txt
-
-# 3. Verify before transfer
-sha256sum -c ./collections/client-name/TRANSFER_FINGERPRINTS.txt
-
-# 4. Verify after transfer (on your machine)
+# After downloading from Gist
 sha256sum -c TRANSFER_FINGERPRINTS.txt
+# Shows: PASSED/FAILED for each file
 ```
 
-**Fingerprint Format:**
+**Fingerprint format:**
 ```
 SHA256_HASH  FILE_SIZE  RELATIVE_PATH
 a1b2c3d4...  1234      collection-summary.json
 e5f6g7h8...  5678      prompts/adr-synthesis-prompt.md
 ```
 
-This gives security-conscious clients cryptographic proof that exactly the approved files are being transferred, with no source code or intellectual property included.
+### 🚀 Complete Gist Workflow
+
+```bash
+# 1. Install tools
+curl -sSL https://raw.githubusercontent.com/imagineux/agent-adr/main/install.sh | bash
+
+# 2. Collect evidence
+./tools/scripts/collect-agentrc.sh . ./collections/client-name
+
+# 3. Create Gist (one command)
+./tools/scripts/gist-transfer.sh ./collections/repo-name
+
+# 4. Share Gist URL for access and analysis
+# 5. Verify and use prompts for AI analysis
+# 6. Delete Gist when done
+```
+
+This gives cryptographic proof that exactly the approved files are being transferred, with no source code or intellectual property included.
 
 ## �� Need Help?
 
