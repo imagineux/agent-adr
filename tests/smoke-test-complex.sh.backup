@@ -1,0 +1,392 @@
+#!/usr/bin/env bash
+# Deterministic smoke test harness for collect-agentrc.sh
+# Tests all major behaviors using fake-agentrc.sh shim
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+COLLECT_SCRIPT="$REPO_ROOT/scripts/collect-agentrc.sh"
+PROMPT_BUILDER="$REPO_ROOT/scripts/build-strong-model-prompt.mjs"
+
+# Test directories
+TEST_WORKSPACE="${TEST_WORKSPACE:-/tmp/agent-adr-smoke-tests-$$}"
+FAKE_AGENTRC="$SCRIPT_DIR/fake-agentrc.sh"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Counters
+TESTS_RUN=0
+TESTS_PASSED=0
+TESTS_FAILED=0
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $*"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
+
+setup() {
+  log_info "Setting up test workspace: $TEST_WORKSPACE"
+  rm -rf "$TEST_WORKSPACE"
+  mkdir -p "$TEST_WORKSPACE"
+  
+  # Create a fake client repo
+  mkdir -p "$TEST_WORKSPACE/fake-client-repo"
+  echo '{"name": "test-repo"}' > "$TEST_WORKSPACE/fake-client-repo/package.json"
+  echo '# Test Repo' > "$TEST_WORKSPACE/fake-client-repo/README.md"
+  
+  # Create fake bin directory with agentrc and npx wrappers
+  mkdir -p "$TEST_WORKSPACE/bin"
+  ln -sf "$FAKE_AGENTRC" "$TEST_WORKSPACE/bin/agentrc"
+  chmod +x "$FAKE_AGENTRC"
+  
+  # Create npx wrapper that intercepts github:microsoft/agentrc calls
+  cat > "$TEST_WORKSPACE/bin/npx" <<'NPXWRAPPER'
+#!/usr/bin/env bash
+# npx wrapper that intercepts github:microsoft/agentrc and redirects to fake agentrc
+if [ "$1" = "github:microsoft/agentrc" ]; then
+  shift
+  exec agentrc "$@"
+fi
+# If not intercepting, call real npx (try common locations)
+for real_npx in /usr/local/bin/npx /usr/bin/npx /opt/homebrew/bin/npx "$HOME/.npm/bin/npx"; do
+  if [ -x "$real_npx" ]; then
+    exec "$real_npx" "$@"
+  fi
+done
+# Fallback: try to find npx in original PATH
+exec npx "$@"
+NPXWRAPPER
+  chmod +x "$TEST_WORKSPACE/bin/npx"
+  
+  # Verify scripts exist
+  if [ ! -x "$COLLECT_SCRIPT" ]; then
+    log_error "collect-agentrc.sh not found or not executable: $COLLECT_SCRIPT"
+    exit 1
+  fi
+  
+  log_info "Test workspace ready"
+}
+
+teardown() {
+  if [ "${KEEP_TEST_ARTIFACTS:-}" != "1" ]; then
+    log_info "Cleaning up test workspace"
+    rm -rf "$TEST_WORKSPACE"
+  else
+    log_info "Kept test artifacts at: $TEST_WORKSPACE"
+  fi
+}
+
+assert_file_exists() {
+  local file="$1"
+  local msg="${2:-File should exist: $file}"
+  if [ -f "$file" ]; then
+    return 0
+  else
+    log_error "ASSERTION FAILED: $msg"
+    return 1
+  fi
+}
+
+assert_json_field() {
+  local file="$1"
+  local field="$2"
+  local expected="$3"
+  local actual
+  actual="$(python3 -c "import json,sys; val=json.load(open(sys.argv[1])).get(sys.argv[2],'__MISSING__'); print(str(val).lower() if isinstance(val, bool) else val)" "$file" "$field" 2>/dev/null || echo '__ERROR__')"
+  if [ "$actual" = "$expected" ]; then
+    return 0
+  else
+    log_error "ASSERTION FAILED: $file $field expected '$expected' but got '$actual'"
+    return 1
+  fi
+}
+
+run_test() {
+  local name="$1"
+  shift
+  TESTS_RUN=$((TESTS_RUN + 1))
+  log_info "Running test: $name"
+  if "$@"; then
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+    log_info "✓ PASSED: $name"
+    return 0
+  else
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+    log_error "✗ FAILED: $name"
+    return 1
+  fi
+}
+
+# === TESTS ===
+
+test_successful_collection() {
+  local collection_dir="$TEST_WORKSPACE/collection-success"
+  local repo="$TEST_WORKSPACE/fake-client-repo"
+  
+  # Use fake bin directory which has agentrc and npx wrappers
+  PATH="$TEST_WORKSPACE/bin:$PATH" \
+  FAKE_AGENTRC_BEHAVIOR=success \
+    bash "$COLLECT_SCRIPT" "$repo" "$collection_dir" "gpt-5-mini"
+  
+  # Verify bundle structure
+  assert_file_exists "$collection_dir/collection-summary.json"
+  assert_file_exists "$collection_dir/metadata/run.json"
+  assert_file_exists "$collection_dir/metadata/environment.json"
+  assert_file_exists "$collection_dir/metadata/commands.json"
+  assert_file_exists "$collection_dir/metadata/analyze-status.json"
+  assert_file_exists "$collection_dir/metadata/readiness-status.json"
+  assert_file_exists "$collection_dir/logs/analyze.stdout.log"
+  assert_file_exists "$collection_dir/logs/readiness.stdout.log"
+  
+  # Verify probe status files exist
+  for probe in flat-root flat-areas nested-root nested-areas; do
+    assert_file_exists "$collection_dir/probes/$probe/status.json"
+  done
+  
+  # Verify generation status files exist
+  assert_file_exists "$collection_dir/generated/flat-root/status.json"
+  assert_file_exists "$collection_dir/generated/nested-root/status.json"
+  
+  # Verify generated output exists
+  assert_file_exists "$collection_dir/generated/flat-root/copilot-instructions.generated.md"
+  assert_file_exists "$collection_dir/generated/nested-root/AGENTS.generated.md"
+  
+  # Verify summary shows success
+  assert_json_field "$collection_dir/collection-summary.json" "anyGeneratedOutput" "true"
+  
+  return 0
+}
+
+test_analyze_failure_continues() {
+  local collection_dir="$TEST_WORKSPACE/collection-analyze-fail"
+  local repo="$TEST_WORKSPACE/fake-client-repo"
+  
+  # Use fake bin directory
+  PATH="$TEST_WORKSPACE/bin:$PATH" \
+  FAKE_AGENTRC_BEHAVIOR=analyze-fail \
+    bash "$COLLECT_SCRIPT" "$repo" "$collection_dir" "gpt-5-mini" || true
+  
+  # Collection should continue despite analyze failure
+  assert_file_exists "$collection_dir/metadata/analyze-status.json"
+  assert_file_exists "$collection_dir/metadata/readiness-status.json"
+  assert_file_exists "$collection_dir/probes/flat-root/status.json"
+  
+  # Verify analyze shows failure in status
+  local analyze_exit
+  analyze_exit="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('exitCode',-1))" "$collection_dir/metadata/analyze-status.json" 2>/dev/null || echo '-1')"
+  if [ "$analyze_exit" != "1" ] && [ "$analyze_exit" != "0" ]; then
+    log_error "Expected analyze exit code 0 or 1, got: $analyze_exit"
+    return 1
+  fi
+  
+  return 0
+}
+
+test_probe_failures_continue() {
+  local collection_dir="$TEST_WORKSPACE/collection-probe-fail"
+  local repo="$TEST_WORKSPACE/fake-client-repo"
+  
+  PATH="$TEST_WORKSPACE/bin:$PATH" \
+  FAKE_AGENTRC_BEHAVIOR=probe-fail \
+    bash "$COLLECT_SCRIPT" "$repo" "$collection_dir" "gpt-5-mini" || true
+  
+  # Probes should have failed but collection continues
+  assert_file_exists "$collection_dir/probes/flat-root/status.json"
+  
+  # Generation should still work
+  assert_file_exists "$collection_dir/generated/flat-root/copilot-instructions.generated.md"
+  
+  return 0
+}
+
+test_generation_failure_handled() {
+  local collection_dir="$TEST_WORKSPACE/collection-gen-fail"
+  local repo="$TEST_WORKSPACE/fake-client-repo"
+  
+  PATH="$TEST_WORKSPACE/bin:$PATH" \
+  FAKE_AGENTRC_BEHAVIOR=gen-fail \
+    bash "$COLLECT_SCRIPT" "$repo" "$collection_dir" "gpt-5-mini" || true
+  
+  # Status files should exist even when generation fails
+  assert_file_exists "$collection_dir/generated/flat-root/status.json"
+  assert_file_exists "$collection_dir/generated/nested-root/status.json"
+  
+  # Output should NOT exist for failed generation
+  if [ -f "$collection_dir/generated/flat-root/copilot-instructions.generated.md" ]; then
+    log_error "Expected no output file for failed generation"
+    return 1
+  fi
+  
+  # Summary should show no generated output
+  assert_json_field "$collection_dir/collection-summary.json" "anyGeneratedOutput" "false"
+  
+  return 0
+}
+
+test_partial_output_handled() {
+  local collection_dir="$TEST_WORKSPACE/collection-partial"
+  local repo="$TEST_WORKSPACE/fake-client-repo"
+  
+  PATH="$TEST_WORKSPACE/bin:$PATH" \
+  FAKE_AGENTRC_BEHAVIOR=partial-output \
+    bash "$COLLECT_SCRIPT" "$repo" "$collection_dir" "gpt-5-mini" || true
+  
+  # File exists but generation reported failure
+  assert_file_exists "$collection_dir/generated/flat-root/copilot-instructions.generated.md"
+  
+  # Status should show failure
+  local gen_exit
+  gen_exit="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('exitCode',-1))" "$collection_dir/generated/flat-root/status.json" 2>/dev/null || echo '-1')"
+  if [ "$gen_exit" != "1" ]; then
+    log_error "Expected generation exit code 1 for partial output, got: $gen_exit"
+    return 1
+  fi
+  
+  return 0
+}
+
+test_repo_boundary_guard() {
+  local collection_dir="$TEST_WORKSPACE/fake-client-repo/collections/test"  # Inside repo!
+  local repo="$TEST_WORKSPACE/fake-client-repo"
+  
+  # This should fail because output is inside the repo
+  if PATH="$TEST_WORKSPACE/bin:$PATH" \
+     FAKE_AGENTRC_BEHAVIOR=success \
+     bash "$COLLECT_SCRIPT" "$repo" "$collection_dir" "gpt-5-mini" 2>&1; then
+    log_error "Expected failure when output is inside repo"
+    return 1
+  fi
+  
+  return 0
+}
+
+test_paths_with_spaces() {
+  local collection_dir="$TEST_WORKSPACE/collection with spaces"
+  local repo="$TEST_WORKSPACE/fake-client-repo"
+  
+  mkdir -p "$collection_dir"
+  
+  PATH="$TEST_WORKSPACE/bin:$PATH" \
+  FAKE_AGENTRC_BEHAVIOR=success \
+    bash "$COLLECT_SCRIPT" "$repo" "$collection_dir" "gpt-5-mini"
+  
+  assert_file_exists "$collection_dir/collection-summary.json"
+  assert_file_exists "$collection_dir/metadata/run.json"
+  
+  return 0
+}
+
+test_prompt_builder_emits_files() {
+  # First run a successful collection
+  local collection_dir="$TEST_WORKSPACE/collection-prompt-test"
+  local repo="$TEST_WORKSPACE/fake-client-repo"
+  
+  PATH="$TEST_WORKSPACE/bin:$PATH" \
+  FAKE_AGENTRC_BEHAVIOR=success \
+    bash "$COLLECT_SCRIPT" "$repo" "$collection_dir" "gpt-5-mini"
+  
+  # Run prompt builder
+  node "$PROMPT_BUILDER" --collection "$collection_dir" --out "$collection_dir/prompts"
+  
+  # Verify both prompt files exist
+  assert_file_exists "$collection_dir/prompts/adr-synthesis-prompt.md"
+  assert_file_exists "$collection_dir/prompts/adr-review-prompt.md"
+  
+  # Verify prompts contain expected sections
+  if ! grep -q "Strong-Model ADR Synthesis Prompt" "$collection_dir/prompts/adr-synthesis-prompt.md"; then
+    log_error "Synthesis prompt missing expected header"
+    return 1
+  fi
+  
+  if ! grep -q "Strong-Model ADR Review Prompt" "$collection_dir/prompts/adr-review-prompt.md"; then
+    log_error "Review prompt missing expected header"
+    return 1
+  fi
+  
+  return 0
+}
+
+test_missing_files_explicit_in_prompt() {
+  # Test that missing files are marked explicitly
+  local collection_dir="$TEST_WORKSPACE/collection-missing-files"
+  local repo="$TEST_WORKSPACE/fake-client-repo"
+  
+  PATH="$TEST_WORKSPACE/bin:$PATH" \
+  FAKE_AGENTRC_BEHAVIOR=gen-fail \
+    bash "$COLLECT_SCRIPT" "$repo" "$collection_dir" "gpt-5-mini" || true
+  
+  node "$PROMPT_BUILDER" --collection "$collection_dir" --out "$collection_dir/prompts"
+  
+  # Check that missing output is explicitly marked
+  if ! grep -q "(missing)" "$collection_dir/prompts/adr-synthesis-prompt.md"; then
+    log_warn "Prompt may not explicitly mark missing files with '(missing)'"
+    # This is a soft check - the snippet function should show '(missing)'
+  fi
+  
+  return 0
+}
+
+test_relative_output_resolves_outside_repo() {
+  local collection_dir="../collection-relative-test"
+  local repo="$TEST_WORKSPACE/fake-client-repo"
+  
+  # Create the collection dir outside the repo
+  mkdir -p "$TEST_WORKSPACE/collection-relative-test"
+  
+  # Run from within the script directory (simulating relative invocation)
+  (cd "$REPO_ROOT" && \
+   PATH="$TEST_WORKSPACE/bin:$PATH" \
+   FAKE_AGENTRC_BEHAVIOR=success \
+     bash "$COLLECT_SCRIPT" "$repo" "$TEST_WORKSPACE/collection-relative-test" "gpt-5-mini")
+  
+  assert_file_exists "$TEST_WORKSPACE/collection-relative-test/collection-summary.json"
+  
+  return 0
+}
+
+# === MAIN ===
+
+main() {
+  log_info "Starting smoke tests"
+  log_info "COLLECT_SCRIPT: $COLLECT_SCRIPT"
+  log_info "PROMPT_BUILDER: $PROMPT_BUILDER"
+  log_info "FAKE_AGENTRC: $FAKE_AGENTRC"
+  
+  setup
+  
+  run_test "successful_collection" test_successful_collection
+  run_test "analyze_failure_continues" test_analyze_failure_continues
+  run_test "probe_failures_continue" test_probe_failures_continue
+  run_test "generation_failure_handled" test_generation_failure_handled
+  run_test "partial_output_handled" test_partial_output_handled
+  run_test "repo_boundary_guard" test_repo_boundary_guard
+  run_test "paths_with_spaces" test_paths_with_spaces
+  run_test "prompt_builder_emits_files" test_prompt_builder_emits_files
+  run_test "missing_files_explicit_in_prompt" test_missing_files_explicit_in_prompt
+  run_test "relative_output_resolves_outside_repo" test_relative_output_resolves_outside_repo
+  
+  teardown
+  
+  echo ""
+  log_info "=== TEST SUMMARY ==="
+  log_info "Tests run: $TESTS_RUN"
+  log_info "Tests passed: $TESTS_PASSED"
+  log_info "Tests failed: $TESTS_FAILED"
+  
+  if [ $TESTS_FAILED -eq 0 ]; then
+    log_info "All tests passed!"
+    exit 0
+  else
+    log_error "Some tests failed!"
+    exit 1
+  fi
+}
+
+# Handle signals
+trap teardown EXIT
+
+main "$@"

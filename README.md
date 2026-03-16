@@ -27,6 +27,15 @@ It does one job: collect `agentrc` evidence safely, preserve failures/diagnostic
 - ADR template
 - Strong-model synthesis/review prompts
 
+## Safety and Hardening
+
+This wrapper has been hardened for enterprise use:
+
+- **Repo Boundary Guard**: Collection will abort if the output directory is inside the client repo (prevents accidental repo contamination)
+- **Argv-based Command Execution**: Commands are executed via arrays rather than string eval, making them safe for paths with spaces, `$`, backticks, or quotes
+- **Deterministic Smoke Tests**: Test harness with fake agentrc shim simulates success/failure scenarios
+- **Failure Robustness**: Collection continues across probe/generation failures; all artifacts produce status/log files even on failure
+
 ## Main deliverables
 - **Collection bundle** (portable, outside client repo)
 - **ADR template**
@@ -47,6 +56,7 @@ Behavior highlights:
 - Captures stdout/stderr/exit/status for analyze/readiness/probes/generation attempts
 - Copies context files best-effort
 - Writes summary + notes
+- Aborts if output directory would be inside the client repo
 
 ### 2) Build strong-model prompts
 ```bash
@@ -56,6 +66,17 @@ node scripts/build-strong-model-prompt.mjs --collection ./collections/client-rep
 Outputs:
 - `prompts/adr-synthesis-prompt.md`
 - `prompts/adr-review-prompt.md`
+
+### 3) Run smoke tests (optional)
+```bash
+./tests/smoke-test.sh
+```
+
+Tests verify:
+- Basic collection works and creates required files
+- Repo boundary guard rejects invalid configurations  
+- Paths with spaces are handled correctly
+- Prompt builder emits both prompt files
 
 ## Short operator flow
 1. Run collection on client machine.
@@ -72,3 +93,10 @@ Even `instructions --dry-run` still exercises generation flow, so failures are e
 
 ## Example
 See `examples/sample-collection-layout.md` for expected bundle layout.
+
+## Testing
+The `tests/` directory contains:
+- `smoke-test.sh` - Simple test harness for core safety features
+- `fake-agentrc.sh` - Complex agentrc simulator (legacy)
+
+Run tests with `KEEP_TEST_ARTIFACTS=1` to preserve test output for inspection.
