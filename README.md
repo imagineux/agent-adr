@@ -165,10 +165,6 @@ KEEP_TEST_ARTIFACTS=1 ./tests/smoke-test-confidence.sh
 11. **Context Copying**: Context files copied when available
 12. **Deterministic Behavior**: Same inputs produce same outputs
 
-### Legacy Tests
-- `smoke-test.sh` - Basic smoke test for core safety features
-- `fake-agentrc.sh` - Enhanced agentrc simulator with multiple behaviors
-
 ### Test Utilities
 - `test-utils.sh` - Common assertion and validation functions
 - `create-fixtures.sh` - Generate test repositories with different characteristics
