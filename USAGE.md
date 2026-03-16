@@ -128,22 +128,40 @@ echo "✅ Ready! Check ./collections/$(basename "$PWD")/prompts/"
 chmod +x ./tools/scripts/collect-agentrc.sh
 ```
 
-## 🔒 Gist Transfer (Locked-Down Environments)
+## 🔒 Transfer Options
 
-For environments where data cannot leave the system, Gist provides a secure transfer method:
+### Option A: Clipboard Transfer (Recommended)
+```bash
+./tools/scripts/clipboard-transfer.sh ./collections/repo-name
+```
 
-### One-Command Gist Workflow
+This automatically:
+1. ✅ Creates minimal transfer package (metadata only)
+2. ✅ Generates cryptographic fingerprints
+3. ✅ Formats everything for Gist pasting
+4. ✅ Copies formatted content to clipboard
+5. ✅ Provides instructions for private Gist creation
+
+**Workflow:**
+1. Run the command
+2. Open https://gist.github.com/
+3. Create new private Gist
+4. Paste clipboard content (Cmd+V / Ctrl+V)
+5. Copy Gist URL for analysis
+6. Delete Gist immediately after use
+
+**Perfect for:**
+- Personal GitHub account usage
+- No CLI authentication required
+- Immediate creation and deletion
+- Complete control over Gist lifecycle
+
+### Option B: Gist Transfer (Automatic - Public)
 ```bash
 ./tools/scripts/gist-transfer.sh ./collections/repo-name
 ```
 
-This automatically:
-1. ✅ Collects evidence from repository
-2. ✅ Builds AI prompts  
-3. ✅ Creates minimal transfer package (metadata only)
-4. ✅ Generates cryptographic fingerprints
-5. ✅ Creates GitHub Gist with all files
-6. ✅ Returns Gist URL for access
+This automatically creates a public Gist with all files using GitHub CLI.
 
 ### What Gets Transferred
 - ✅ `collection-summary.json` - Repository metadata
@@ -160,14 +178,15 @@ This automatically:
 - ❌ Sensitive configuration
 - ❌ Intellectual property
 
-### Access Workflow
-1. **You run one command** → Get Gist URL
-2. **Open Gist URL** → Review metadata files
-3. **Download files** → Verify with fingerprints
-4. **Use prompts** → Get AI analysis
-5. **Delete Gist** → Security maintained
-
 ### Requirements
+
+**For Clipboard Transfer:**
+- pbcopy (macOS, built-in)
+- xclip (Linux: `sudo apt install xclip`)
+- clip.exe (Windows, built-in)
+- Personal GitHub account for private Gist
+
+**For Gist Transfer (Optional):**
 - GitHub CLI installed: `brew install gh`
 - Authenticated: `gh auth login`
 - Or GITHUB_TOKEN environment variable
@@ -194,21 +213,21 @@ a1b2c3d4...  1234      collection-summary.json
 e5f6g7h8...  5678      prompts/adr-synthesis-prompt.md
 ```
 
-### 🚀 Complete Gist Workflow
+### 🚀 Complete Workflow
 
 ```bash
 # 1. Install tools
 curl -sSL https://raw.githubusercontent.com/imagineux/agent-adr/main/install.sh | bash
 
 # 2. Collect evidence
-./tools/scripts/collect-agentrc.sh . ./collections/client-name
+./tools/scripts/collect-agentrc.sh . ./collections/repo-name
 
-# 3. Create Gist (one command)
-./tools/scripts/gist-transfer.sh ./collections/repo-name
+# 3. Copy to clipboard for private Gist (recommended)
+./tools/scripts/clipboard-transfer.sh ./collections/repo-name
 
-# 4. Share Gist URL for access and analysis
-# 5. Verify and use prompts for AI analysis
-# 6. Delete Gist when done
+# 4. Create private Gist and paste content
+# 5. Use prompts for AI analysis
+# 6. Delete Gist immediately after use
 ```
 
 This gives cryptographic proof that exactly the approved files are being transferred, with no source code or intellectual property included.

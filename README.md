@@ -218,9 +218,9 @@ This section helps deploy agent-adr in target environments for evidence collecti
 curl -sSL https://raw.githubusercontent.com/imagineux/agent-adr/main/install.sh | bash
 ```
 
-**For locked-down environments (Gist-only transfer):**
+**For locked-down environments (Clipboard to private Gist):**
 ```bash
-./tools/scripts/gist-transfer.sh ./collections/repo-name
+./tools/scripts/clipboard-transfer.sh ./collections/repo-name
 ```
 
 See [USAGE.md](USAGE.md) for complete step-by-step guide.
@@ -244,11 +244,11 @@ echo "tools/" >> .gitignore
 rm -rf /tmp/agent-adr
 ```
 
-**Option 3: Gist-Only Transfer (Locked-down Environments)**
+**Option 3: Clipboard Transfer (Private Gist)**
 ```bash
-# Perfect for environments that only allow Gist transfers
-./tools/scripts/gist-transfer.sh ./collections/repo-name
-# Returns Gist URL for secure access
+# Perfect for private Gist creation with personal account
+./tools/scripts/clipboard-transfer.sh ./collections/repo-name
+# Copies formatted content to clipboard for private Gist pasting
 ```
 
 ### Choosing Your Deployment Method
@@ -257,7 +257,8 @@ rm -rf /tmp/agent-adr
 |--------|----------|------|------|
 | **Subtree** | Repeat deployments, ongoing relationships | Version tracking, easy updates | Requires Git knowledge |
 | **Copy-and-Forget** | One-off assessments, security-conscious | Zero Git complexity, works offline | Manual updates required |
-| **Gist-Only Transfer** | Locked-down environments, security-focused | Cryptographic verification, approved access | Requires GitHub CLI |
+| **Clipboard Transfer** | Private Gist creation, personal account | No CLI auth, immediate creation/deletion | Manual Gist creation |
+| **Gist-Only Transfer** | Public Gist, automatic creation | Cryptographic verification, approved access | Requires GitHub CLI |
 
 ### Recommended Directory Structure
 ```
