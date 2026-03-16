@@ -63,8 +63,27 @@ We do **not** delegate final recommendations or ADR authorship to `agentrc`.
 - Bash
 - Node.js 18+ (use `nvm install 18` to install)
 - npm (comes with Node.js)
-- git (for cloning remote repos)
 - agentrc (automatically installed as npm dependency)
+- GitHub Personal Access Token (for private repositories)
+
+## Authentication Setup
+
+For accessing private GitHub repositories, you'll need to configure authentication:
+
+```bash
+# Interactive setup (recommended)
+agent-adr auth-setup
+
+# Or provide token directly
+agent-adr auth-setup --token "ghp_your_token_here"
+
+# Or use environment variable
+export GITHUB_PAT="ghp_your_token_here"
+```
+
+**Required Token Scopes:**
+- `repo` - Full repository access
+- `read:org` - Read organization data (for batch processing)
 
 ## Installation
 
@@ -96,27 +115,46 @@ agent-adr /path/to/target/repo --output ../collections/target-repo-name
 
 Usage:
 ```bash
-agent-adr /path/to/client/repo --output ../collections/client-repo-name [model] [timeout]
-agent-adr owner/repo --output ../collections/client-repo-name [model] [timeout]  # GitHub remote
-agent-adr https://github.com/owner/repo --output ../collections/client-repo-name [model] [timeout]
+# Single repository
+agent-adr /path/to/client/repo --output ../collections/client-repo-name
+agent-adr owner/repo --output ../collections/client-repo-name  # GitHub remote
+agent-adr https://github.com/owner/repo --output ../collections/client-repo-name
 
-Arguments:
-  repo-path           Local path or GitHub repository (owner/repo or full URL)
-  --output OUTPUT     Output directory for collection artifacts and prompts
-  model               AI model to use (default: gpt-5-mini)
-  timeout             Timeout per command in seconds (default: 300)
+# Multiple repositories (individual processing)
+agent-adr owner/repo1 owner/repo2 owner/repo3 --output ../collections/batch-analysis
+
+# Batch processing (recommended for multiple repos)
+agent-adr owner/repo1 owner/repo2 owner/repo3 --output ../collections/batch-analysis --batch
+
+# Interactive repository discovery (NEW!)
+agent-adr discover
+agent-adr discover --org microsoft
+
+# Options
+--output DIR         Output directory for collection artifacts and prompts (required)
+--education          Use educational synthesis template with comprehensive framework
+--model MODEL        AI model to use (default: gpt-5-mini)
+--timeout SECONDS    Timeout per command in seconds (default: 300)
+--interactive        Interactive mode - review and confirm each step
+--batch              Process multiple repositories using agentrc batch command
 ```
 
-Remote repos are automatically cloned to a temporary directory for analysis.
+**Repository Formats:**
+- Local path: `/path/to/local/repo`
+- GitHub identifier: `owner/repo`
+- Full GitHub URL: `https://github.com/owner/repo`
+
+Remote repos are accessed directly via GitHub API (no cloning required).
 
 What it does:
 - Validates Node.js environment
 - Enforces `AGENTRC_DEBUG_COPILOT=1`
 - Preserves `AGENTRC_COPILOT_CLI_PATH` if provided
 - Overrides model for instruction flow (default: `gpt-5-mini`)
-- Clones remote repos to temporary directories (auto-cleanup)
+- **Accesses remote repos via GitHub API** (no temporary directories)
+- Supports batch processing of multiple repositories
 - Captures stdout/stderr/exit/status for analyze/readiness/probes/generation attempts
-- Copies context files best-effort
+- Copies context files for local repos only
 - **Builds synthesis prompt in memory using Node.js**
 - **Saves prompt to file for easy copy/paste**
 - Aborts if output directory would be inside the client repo (local repos only)
@@ -125,6 +163,107 @@ Outputs:
 - **Prompt saved to file** - Ready for any advanced AI model synthesis
 - `prompts/adr-synthesis-prompt.md` - Complete synthesis prompt
 - Complete collection artifacts in `../collections/client-repo-name/`
+
+## New Features: GitHub API Integration & Batch Processing
+
+### Key Improvements
+- **No More Cloning**: Remote repositories are accessed directly via GitHub API
+- **Private Repo Support**: Full support for private repositories with PAT authentication
+- **Batch Processing**: Process multiple repositories efficiently using agentrc's batch command
+- **Better Performance**: Leverages agentrc's internal optimization and caching
+- **Enterprise Ready**: Proper authentication and error handling
+
+### Authentication
+- Secure PAT storage in `~/.config/agent-adr/config.json`
+- Environment variable fallback (`GITHUB_PAT`)
+- Token validation during setup
+- Required scopes: `repo`, `read:org`
+
+### Batch Processing Benefits
+- Parallel processing of multiple repositories
+- Single command execution across repos
+- Consolidated output for cross-repo analysis
+- Leverages agentrc's built-in remote capabilities
+
+## Interactive Repository Discovery
+
+**New: Step-by-step repository selection workflow**
+
+```bash
+# Interactive discovery with organization and repository selection
+agent-adr discover
+
+# Target specific organization with filtering
+agent-adr discover --org microsoft
+agent-adr discover --org microsoft --name "TypeScript-*"
+agent-adr discover --org mycompany --name "tps-*" --private
+agent-adr discover --org myorg --language "TypeScript" --description "*API*"
+```
+
+**Workflow Steps:**
+1. **Authentication Check** - Validates GitHub PAT access
+2. **Organization Selection** - Choose from your available organizations
+3. **Repository Selection** - Multi-select repositories to analyze  
+4. **Configuration** - Set output directory and processing options
+5. **Automatic Execution** - Runs analysis with selected repositories
+
+**Filtering Options:**
+```bash
+--org <org>              Target specific organization
+--name <pattern>         Filter by repository name (supports wildcards)
+--description <pattern>  Filter by description text (supports wildcards)  
+--language <language>    Filter by primary programming language
+--private               Show only private repositories
+--public                Show only public repositories
+```
+
+**Pattern Matching:**
+- Use `*` as wildcard: `"tps-*"` matches "tps-api", "tps-web", etc.
+- Case insensitive: `"typescript"` matches "TypeScript" and "typescript"
+- Description filtering searches repository descriptions
+
+**Examples:**
+```bash
+# Find all repos starting with "tps-" in my company
+agent-adr discover --org mycompany --name "tps-*"
+
+# Find TypeScript repositories with "API" in description
+agent-adr discover --org myorg --language TypeScript --description "*API*"
+
+# Find only private repositories with "service" in name
+agent-adr discover --org mycompany --name "*service*" --private
+```
+
+**Benefits:**
+- ✅ No need to manually type repository names
+- ✅ See repository descriptions and privacy status
+- ✅ Browse your accessible organizations and repos
+- ✅ Interactive multi-selection with validation
+- ✅ Powerful filtering with pattern matching
+- ✅ Automatic batch processing optimization
+
+**Example Session:**
+```bash
+$ agent-adr discover
+
+🔍 Discovering GitHub repositories...
+✔ Connected as: your-username
+
+? Select organization: 
+❯ your-username - Personal repositories
+  organization1 - Company repos  
+  organization2 - Open source projects
+
+? Select repositories to analyze:
+❯ ◯ repo1 - Description here (🌍 public)
+  ◯ repo2 - Private project (🔒 private)
+  ◯ repo3 - Another repo (🌍 public)
+
+? Output directory for collection: ../collections/my-analysis
+? Use batch processing for better performance? Yes
+
+🚀 Starting analysis...
+```
 
 ## Safety and Hardening
 

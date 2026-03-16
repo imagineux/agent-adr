@@ -2,12 +2,13 @@
   "name": "agent-adr",
   "version": "1.0.0",
   "description": "A minimal operator utility for collecting repository evidence with microsoft/agentrc and building high-quality ADR synthesis prompts",
-  "main": "bin/agent-adr.js",
+  "type": "module",
+  "main": "bin/agent-adr.mjs",
   "bin": {
-    "agent-adr": "./bin/agent-adr.js"
+    "agent-adr": "./bin/agent-adr.mjs"
   },
   "scripts": {
-    "start": "./bin/agent-adr.js",
+    "start": "./bin/agent-adr.mjs",
     "install-deps": "npm install",
     "test": "make test"
   },
@@ -34,6 +35,11 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@microsoft/agentrc": "^2.0.1-0"
+    "@microsoft/agentrc": "^2.0.1-0",
+    "@octokit/rest": "^20.0.2",
+    "commander": "^14.0.3",
+    "dotenv": "^16.4.5",
+    "inquirer": "^13.3.2",
+    "ora": "^9.3.0"
   }
 }

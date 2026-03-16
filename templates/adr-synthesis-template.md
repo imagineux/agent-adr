@@ -28,10 +28,10 @@ Use only the evidence below. Where data is missing, state that directly.
 - Constraints that limit AI enablement.
 - Readiness for instructions, skills, evals, workflows, MCP, and autonomy.
 - First best next moves.
-- Team learning priorities.
-- Validation experiments and success metrics.
 
 ---
+
+{{USER_COMMENTS_MD}}
 
 ## [SECTION] Collection Summary
 
@@ -51,30 +51,29 @@ Use only the evidence below. Where data is missing, state that directly.
 {{READINESS_JSON}}
 ```
 
-## [SECTION] instructions-status.json
+## [SECTION] Instructions Status
 
 ```json
 {{INSTRUCTIONS_STATUS_JSON}}
 ```
 
-## [SECTION] Generated instructions (if available)
+## [SECTION] Generated Instructions
 
-```markdown
 {{GENERATED_INSTRUCTIONS_MD}}
-```
 
-## [SECTION] Copied repo context files
+## [SECTION] Copied Context Files
 
 {{COPIED_CONTEXT_FILES_MD}}
 
-## [SECTION] Evaluator notes
+## [SECTION] Probe Results
 
-```markdown
 {{EVALUATOR_NOTES_MD}}
-```
 
-## [SECTION] ADR template to fill
+---
+
+## ADR Template
+
+{{ADR_TEMPLATE_MD}} template to fill
 
 ```markdown
 {{ADR_TEMPLATE_MD}}
-```
