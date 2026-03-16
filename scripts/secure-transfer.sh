@@ -109,6 +109,11 @@ if [ -f "$COLLECTION_DIR/context/package.json" ]; then
     cp "$COLLECTION_DIR/context/package.json" "$TRANSFER_DIR/"
 fi
 
+# Include docs folder if it exists (critical for repo understanding)
+if [ -d "$COLLECTION_DIR/context/docs" ]; then
+    cp -r "$COLLECTION_DIR/context/docs" "$TRANSFER_DIR/"
+fi
+
 # Create transfer manifest
 cat > "$TRANSFER_DIR/TRANSFER_MANIFEST.md" <<MANIFEST
 # Secure Transfer Manifest
@@ -128,6 +133,7 @@ This package contains ONLY metadata and prompts - **no source code**:
 | adr-review-prompt.md | AI review prompt | Quality assurance prompt |
 | README.md | Project documentation | Client's project README (if present) |
 | package.json | Package metadata | Node.js package information (if present) |
+| docs/ | Repository documentation | ADRs, API docs, architecture, components (if present) |
 
 ## What This Does NOT Contain
 

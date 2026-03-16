@@ -342,6 +342,7 @@ copy_if_exists "CODEOWNERS" "CODEOWNERS"
 copy_if_exists "SECURITY.md" "SECURITY.md"
 copy_if_exists "docs/adr" "docs/adr"
 copy_if_exists "docs/architecture" "docs/architecture"
+copy_if_exists "docs/" "docs/"
 
 FR_CODE="$(probe_exit_code "$OUT/probes/flat-root/status.json")"
 FA_CODE="$(probe_exit_code "$OUT/probes/flat-areas/status.json")"

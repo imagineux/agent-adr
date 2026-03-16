@@ -4,10 +4,24 @@ Get agent-adr running in a client repository in 30 seconds.
 
 ## 🚀 Quick Start
 
-### Step 1: Install Tools (One Command)
+### Step 1: Install Tools (Choose Method)
 
+**Option A: Simple Standalone (Recommended)**
+```bash
+curl -sSL https://raw.githubusercontent.com/imagineux/agent-adr/main/standalone-simple.sh | bash
+```
+
+**Option B: Full Installer (More Features)**
 ```bash
 curl -sSL https://raw.githubusercontent.com/imagineux/agent-adr/main/install.sh | bash
+```
+
+**Option C: Ultra-Standalone (No Network)**
+```bash
+# Download the standalone file first
+curl -sSL https://raw.githubusercontent.com/imagineux/agent-adr/main/standalone-installer-complete.sh > install.sh
+chmod +x install.sh
+./install.sh
 ```
 
 That's it! The tools are now in `./tools/` and ready to use.
@@ -136,6 +150,7 @@ This automatically:
 - ✅ `adr-review-prompt.md` - AI review prompt  
 - ✅ `README.md` - Project documentation (if present)
 - ✅ `package.json` - Package metadata (if present)
+- ✅ `docs/` folder - Repository documentation, ADRs, API docs (if present)
 
 ### What Does NOT Get Transferred
 - ❌ Source code files
@@ -159,7 +174,7 @@ sha256sum -c secure-transfer-client-name-20240315.tar.gz.sha256
 tar -xzf secure-transfer-client-name-20240315.tar.gz
 ```
 
-## �📞 Need Help?
+## �� Need Help?
 
 - **Full documentation**: See README.md for comprehensive guide
 - **Testing**: Run `cd tools && make test` to verify everything works
