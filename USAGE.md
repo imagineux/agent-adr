@@ -159,6 +159,21 @@ This automatically:
 - ❌ Intellectual property
 
 ### Transfer Methods
+
+**Option A: Gist Transfer (Recommended for Locked-Down Clients)**
+```bash
+./tools/scripts/gist-transfer.sh ./collections/client-name
+```
+
+This automatically:
+- ✅ Creates transfer package with metadata only
+- ✅ Generates cryptographic fingerprints
+- ✅ Creates GitHub Gist with all files
+- ✅ Provides Gist URL for client access
+- ✅ Includes verification instructions
+- ✅ Perfect for clients who only allow Gist transfers
+
+**Option B: Manual Transfer**
 ```bash
 # After secure-transfer.sh runs, you get:
 secure-transfer-client-name-20240315.tar.gz
@@ -175,6 +190,39 @@ sha256sum -c secure-transfer-client-name-20240315.tar.gz.sha256
 sha256sum -c TRANSFER_FINGERPRINTS.txt
 tar -xzf secure-transfer-client-name-20240315.tar.gz
 ```
+
+### 🚀 Gist Transfer Workflow (Perfect for Locked-Down Clients)
+
+**One-Command Gist Creation:**
+```bash
+./tools/scripts/gist-transfer.sh ./collections/client-name
+```
+
+**What Happens Automatically:**
+1. ✅ Creates minimal transfer package (metadata only)
+2. ✅ Generates cryptographic fingerprints
+3. ✅ Creates GitHub Gist with all files
+4. ✅ Returns Gist URL for client
+5. ✅ Includes verification instructions
+
+**Client Instructions:**
+1. Open Gist URL in browser
+2. Review files (should be metadata only)
+3. Download all files
+4. Verify integrity: `sha256sum -c TRANSFER_FINGERPRINTS.txt`
+5. Use prompts for AI analysis
+6. Delete Gist after verification
+
+**Requirements:**
+- GitHub CLI installed: `brew install gh`
+- Authenticated: `gh auth login`
+- Or GITHUB_TOKEN environment variable
+
+**Security Features:**
+- 🔐 Cryptographic fingerprints included
+- 📋 Clear file list verification
+- 🗑️ Auto-delete instructions
+- 🔍 Client can verify everything independently
 
 ### 🔐 Cryptographic Verification (Security-Conscious Clients)
 
