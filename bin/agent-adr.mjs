@@ -31,81 +31,35 @@ const program = new Command();
 // Program configuration
 program
   .name('agent-adr')
-  .description('Collect repository evidence and build AI enablement ADR synthesis prompts')
+  .description('Batch repository analysis for AI readiness assessment')
   .version('1.0.0');
 
-// Check if discover command is being used
-const args = process.argv.slice(2);
-if (args[0] === 'discover') {
-  // Create separate program for discover command
-  const discoverProgram = new Command();
-  discoverProgram
-    .name('agent-adr')
-    .description('Collect repository evidence and build AI enablement ADR synthesis prompts')
-    .version('1.0.0');
-  
-  discoverProgram
-    .command('discover')
-    .description('Interactive repository discovery and selection')
-    .option('--org <org>', 'Specific organization to search')
-    .option('--name <pattern>', 'Filter repositories by name pattern (supports wildcards)')
-    .option('--description <pattern>', 'Filter repositories by description pattern')
-    .option('--language <language>', 'Filter repositories by primary language')
-    .option('--private', 'Show only private repositories')
-    .option('--public', 'Show only public repositories')
-    .action(discoverCommand);
-  
-  discoverProgram.parse(process.argv);
-} else {
-  // Regular program with auth-setup and collect commands
-  // Add auth-setup command first
-  program
-    .command('auth-setup')
-    .description('Set up GitHub authentication for private repository access')
-    .option('--token <token>', 'GitHub Personal Access Token')
-    .action(authSetupCommand);
-
-// Main collection command
+// Add auth-setup command
 program
-  .command('collect')
-  .alias('c')
-  .argument('[repos...]', 'One or more repositories (local paths or owner/repo)')
-  .requiredOption('-o, --output <output-dir>', 'Output directory for collection artifacts and prompts')
-  .option('-e, --education', 'Use educational synthesis template with comprehensive framework')
-  .option('-m, --model <model>', 'AI model to use', 'gpt-5-mini')
-  .option('-t, --timeout <timeout>', 'Timeout per command in seconds', '300')
-  .option('-i, --interactive', 'Interactive mode - review and confirm each step')
-  .option('--batch', 'Process multiple repositories using agentrc batch command')
-  .action(async (repos, options) => {
-    try {
-      await main({ repos, outputDir: options.output, useEducation: options.education, model: options.model, timeout: parseInt(options.timeout), interactive: options.interactive, batch: options.batch });
-    } catch (error) {
-      console.error(`❌ Fatal error: ${error.message}`);
-      process.exit(1);
-    }
-  });
+  .command('auth-setup')
+  .description('Set up GitHub authentication for private repository access')
+  .option('--token <token>', 'GitHub Personal Access Token')
+  .action(authSetupCommand);
 
-// Default action for backward compatibility - treat as collect command
+// Main batch command
 program
-  .argument('[repos...]', 'One or more repositories (local paths or owner/repo)')
-  .requiredOption('-o, --output <output-dir>', 'Output directory for collection artifacts and prompts')
-  .option('-e, --education', 'Use educational synthesis template with comprehensive framework')
-  .option('-m, --model <model>', 'AI model to use', 'gpt-5-mini')
-  .option('-t, --timeout <timeout>', 'Timeout per command in seconds', '300')
-  .option('-i, --interactive', 'Interactive mode - review and confirm each step')
-  .option('--batch', 'Process multiple repositories using agentrc batch command')
-  .action(async (repos, options) => {
-    try {
-      await main({ repos, outputDir: options.output, useEducation: options.education, model: options.model, timeout: parseInt(options.timeout), interactive: options.interactive, batch: options.batch });
-    } catch (error) {
-      console.error(`❌ Fatal error: ${error.message}`);
-      process.exit(1);
-    }
-  });
+  .command('batch')
+  .description('Interactive batch repository analysis')
+  .option('--org <org>', 'Specific organization to search')
+  .action(batchCommand);
 
-  // Run program for non-discover commands
-  program.parse();
-}
+// Auto-batch command with interactive team/user selection
+program
+  .command('auto-batch')
+  .description('Interactive team-based repository discovery and batch analysis')
+  .option('--org <org>', 'Specific organization to search')
+  .option('--pattern <pattern>', 'Repository name pattern (default: *)', '*')
+  .option('--days <days>', 'Number of days to look back (default: 365)', '365')
+  .option('--non-interactive', 'Run without interactive prompts (auto-select all teams and users)')
+  .action(autoBatchCommand);
+
+// Run program
+program.parse();
 
 // Authentication and configuration utilities
 function getConfigPath() {
@@ -151,8 +105,8 @@ async function validateGitHubToken(token) {
   }
 }
 
-// Interactive repository discovery
-async function discoverCommand(options) {
+// Batch analysis command
+async function batchCommand(options) {
   console.log('🔍 Discovering GitHub repositories...\n');
   
   // Get authentication token
@@ -240,38 +194,8 @@ async function discoverCommand(options) {
     
     repoSpinner.succeed(`Found ${repos.length} repositories`);
     
-    // Apply filters
-    const filteredRepos = repos.filter(repo => {
-      // Name pattern filter
-      if (options.name) {
-        const pattern = options.name.replace(/\*/g, '.*');
-        const regex = new RegExp(pattern, 'i');
-        if (!regex.test(repo.name)) return false;
-      }
-      
-      // Description pattern filter
-      if (options.description && repo.description) {
-        const pattern = options.description.replace(/\*/g, '.*');
-        const regex = new RegExp(pattern, 'i');
-        if (!regex.test(repo.description)) return false;
-      }
-      
-      // Language filter
-      if (options.language && repo.language !== options.language) {
-        return false;
-      }
-      
-      // Privacy filter
-      if (options.private && !repo.private) return false;
-      if (options.public && repo.private) return false;
-      
-      return true;
-    });
-    
-    console.log(`🔍 Applied filters: ${filteredRepos.length} repositories match criteria`);
-    
-    if (filteredRepos.length === 0) {
-      console.log('No repositories match the specified filters.');
+    if (repos.length === 0) {
+      console.log('No repositories found in this organization.');
       return;
     }
     
@@ -281,7 +205,7 @@ async function discoverCommand(options) {
         type: 'checkbox',
         name: 'selectedRepos',
         message: 'Select repositories to analyze:',
-        choices: filteredRepos.map(repo => ({
+        choices: repos.map(repo => ({
           name: `${repo.name} - ${repo.description || 'No description'} ${repo.private ? '(🔒 private)' : '(🌍 public)'}`,
           value: `${repo.owner.login}/${repo.name}`,
           checked: false
@@ -298,49 +222,58 @@ async function discoverCommand(options) {
     console.log(`\n✅ Selected ${selectedRepos.length} repositories:`);
     selectedRepos.forEach(repo => console.log(`  - ${repo}`));
     
-    // Ask for output directory
-    const { outputDir } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'outputDir',
-        message: 'Output directory for collection:',
-        default: `../collections/${selectedOrg}-analysis`,
-        validate: (input) => {
-          if (!input.trim()) {
-            return 'Output directory is required';
-          }
-          return true;
-        }
-      }
-    ]);
+    console.log('\n🚀 Starting batch analysis...');
     
-    // Ask for batch processing
-    const { useBatch } = await inquirer.prompt([
-      {
-        type: 'confirm',
-        name: 'useBatch',
-        message: 'Use batch processing for better performance?',
-        default: selectedRepos.length > 1
-      }
-    ]);
-    
-    console.log('\n🚀 Starting analysis...');
-    
-    // Run analysis with selected repositories
-    await main({
-      repos: selectedRepos,
-      outputDir,
-      useEducation: false,
-      model: 'gpt-5-mini',
-      timeout: 600,
-      interactive: false,
-      batch: useBatch
-    });
+    // Run batch analysis with selected repositories
+    await runBatchAnalysis(selectedRepos);
     
   } catch (error) {
     spinner.fail('Failed to connect to GitHub');
     console.error(`❌ Error: ${error.message}`);
     process.exit(1);
+  }
+}
+
+// Run batch analysis
+async function runBatchAnalysis(selectedRepos) {
+  const outputDir = '.agent-adr-cache';
+  const model = 'gpt-5-mini';
+  const timeout = 600;
+  
+  // Parse repository identifiers
+  const parsedRepos = parseRepoIdentifiers(selectedRepos);
+  
+  // Get GitHub token
+  const token = await getGitHubToken();
+  
+  // Run batch collection
+  const collectionResults = await collectEvidenceBatch({ 
+    repos: parsedRepos, 
+    outputDir, 
+    model, 
+    timeout, 
+    token 
+  });
+  
+  // Generate summary JSON
+  const summaryPath = path.join(outputDir, 'batch-summary.json');
+  const summaryData = {
+    timestamp: new Date().toISOString(),
+    totalRepos: selectedRepos.length,
+    successfulRepos: parsedRepos.filter(repo => collectionResults.results[repo.identifier]?.overallSuccess).length,
+    failedRepos: parsedRepos.filter(repo => !collectionResults.results[repo.identifier]?.overallSuccess).length,
+    repositories: selectedRepos,
+    results: collectionResults.results
+  };
+  
+  fs.writeFileSync(summaryPath, JSON.stringify(summaryData, null, 2));
+  
+  console.log(`\n✅ Batch analysis complete!`);
+  console.log(`📊 Summary JSON created: ${summaryPath}`);
+  console.log(`📈 Analyzed ${summaryData.successfulRepos}/${summaryData.totalRepos} repositories successfully`);
+  
+  if (summaryData.failedRepos > 0) {
+    console.log(`⚠️  ${summaryData.failedRepos} repositories failed to analyze`);
   }
 }
 
@@ -489,7 +422,7 @@ async function validateRepoAccess(repos, token) {
 }
 
 // Execute agentrc command with timeout and progress
-async function executeAgentrc(command, args, cwd, timeout = 300000, commandName, interactive = false) {
+async function executeAgentrc(command, args, cwd, timeout = 300000, commandName) {
   return new Promise((resolve, reject) => {
     const spinner = ora(`Running ${commandName}...`).start();
     const startTime = Date.now();
@@ -561,26 +494,10 @@ async function executeAgentrc(command, args, cwd, timeout = 300000, commandName,
       
       if (code === 0) {
         spinner.succeed(`${commandName} completed successfully`);
-        
-        // Show preview and ask for confirmation if interactive mode
-        if (interactive) {
-          await showStepSummaryAndConfirm(summary);
-        }
         resolve(summary);
       } else {
         spinner.fail(`${commandName} failed (exit code: ${code})`);
-        
-        // Show error details and ask if user wants to continue if interactive mode
-        if (interactive) {
-          const shouldContinue = await showErrorAndAskContinue(summary);
-          if (shouldContinue) {
-            resolve({ ...summary, success: false });
-          } else {
-            reject(new Error(`User chose to stop after ${commandName} failed`));
-          }
-        } else {
-          resolve({ ...summary, success: false });
-        }
+        resolve({ ...summary, success: false });
       }
     });
 
@@ -592,120 +509,22 @@ async function executeAgentrc(command, args, cwd, timeout = 300000, commandName,
   });
 }
 
-// Show step summary and ask for confirmation
-async function showStepSummaryAndConfirm(step) {
-  console.log(`\n📋 ${step.name} Summary:`);
-  console.log(`⏱️  Time: ${step.elapsed}s`);
-  console.log(`✅ Status: Success`);
-  
-  // Show preview of output (first few lines)
-  if (step.stdout) {
-    const preview = step.stdout.split('\n').slice(0, 5).join('\n');
-    console.log(`📄 Output Preview:`);
-    console.log('```');
-    console.log(preview);
-    console.log('```');
-    
-    if (step.stdout.split('\n').length > 5) {
-      console.log(`... (${step.stdout.split('\n').length - 5} more lines)`);
-    }
-  }
-  
-  // Ask for user context/comments
-  const { shouldContinue, userComments } = await inquirer.prompt([
-    {
-      type: 'confirm',
-      name: 'shouldContinue',
-      message: `Continue with next step?`,
-      default: true
-    },
-    {
-      type: 'editor',
-      name: 'userComments',
-      message: 'Add any context, notes, or observations about this step:',
-      when: () => true,
-      default: ''
-    }
-  ]);
-  
-  // Store user comments if provided
-  if (userComments && userComments.trim()) {
-    step.userComments = userComments.trim();
-    console.log(`📝 Notes added: ${userComments.trim().split('\n')[0]}${userComments.trim().split('\n').length > 1 ? '...' : ''}`);
-  }
-  
-  if (!shouldContinue) {
-    throw new Error('User chose to stop the process');
-  }
-}
-
-// Show error details and ask if user wants to continue
-async function showErrorAndAskContinue(step) {
-  console.log(`\n❌ ${step.name} Error Details:`);
-  console.log(`⏱️  Time: ${step.elapsed}s`);
-  console.log(`🔴 Exit Code: ${step.exitCode}`);
-  
-  // Show error output
-  if (step.stderr) {
-    console.log(`📄 Error Output:`);
-    console.log('```');
-    console.log(step.stderr);
-    console.log('```');
-  }
-  
-  // Show stdout if available
-  if (step.stdout) {
-    const preview = step.stdout.split('\n').slice(0, 3).join('\n');
-    console.log(`📄 Partial Output:`);
-    console.log('```');
-    console.log(preview);
-    console.log('```');
-  }
-  
-  // Ask for user context/comments even on errors
-  const { shouldContinue, userComments } = await inquirer.prompt([
-    {
-      type: 'confirm',
-      name: 'shouldContinue',
-      message: `${step.name} failed. Continue anyway? (Some data may be incomplete)`,
-      default: true
-    },
-    {
-      type: 'editor',
-      name: 'userComments',
-      message: 'Add context about this failure or workarounds:',
-      when: () => true,
-      default: ''
-    }
-  ]);
-  
-  // Store user comments if provided
-  if (userComments && userComments.trim()) {
-    step.userComments = userComments.trim();
-    console.log(`📝 Notes added: ${userComments.trim().split('\n')[0]}${userComments.trim().split('\n').length > 1 ? '...' : ''}`);
-  }
-  
-  return shouldContinue;
-}
 
 // Main collection function
 async function collectEvidence(config) {
-  const { repoPath, outputDir, model, timeout, interactive, isRemote, token } = config;
+  const { repoPath, outputDir, model, timeout, isRemote, token } = config;
   
   console.log(`🚀 Starting collection for: ${repoPath}`);
   console.log(`📁 Output directory: ${outputDir}`);
   console.log(`⏱️  Timeout per command: ${timeout}s`);
   console.log(`🤖 Using model: ${model}`);
-  if (interactive) {
-    console.log(`🎮 Interactive mode: You'll review and confirm each step`);
-  }
   console.log('');
 
   // Create output directory
   fs.mkdirSync(outputDir, { recursive: true });
   
   // Create subdirectories
-  const dirs = ['logs', 'metadata', 'probes', 'generated', 'context', 'prompts'];
+  const dirs = ['logs', 'metadata', 'probes', 'generated', 'context'];
   dirs.forEach(dir => fs.mkdirSync(path.join(outputDir, dir), { recursive: true }));
 
   // Get agentrc path
@@ -727,13 +546,7 @@ async function collectEvidence(config) {
     // For local repos, use current working directory approach
     commands.push(
       { name: 'analyze', args: ['analyze', '--json', '--output', path.join(outputDir, 'analyze.json')] },
-      { name: 'readiness', args: ['readiness', '--json', '--output', path.join(outputDir, 'readiness.json')] },
-      { name: 'probe-flat-root', args: ['instructions', '--dry-run', '--json', '--model', model] },
-      { name: 'probe-flat-areas', args: ['instructions', '--dry-run', '--json', '--areas', '--model', model] },
-      { name: 'probe-nested-root', args: ['instructions', '--dry-run', '--json', '--strategy', 'nested', '--model', model] },
-      { name: 'probe-nested-areas', args: ['instructions', '--dry-run', '--json', '--strategy', 'nested', '--areas', '--model', model] },
-      { name: 'generate-flat', args: ['instructions', '--output', path.join(outputDir, 'generated', 'flat-root', 'copilot-instructions.generated.md'), '--model', model, '--force'] },
-      { name: 'generate-nested', args: ['instructions', '--strategy', 'nested', '--output', path.join(outputDir, 'generated', 'nested-root', 'AGENTS.generated.md'), '--model', model, '--force'] }
+      { name: 'readiness', args: ['readiness', '--json', '--output', path.join(outputDir, 'readiness.json')] }
     );
   }
 
@@ -775,20 +588,11 @@ async function collectEvidence(config) {
       
       for (const cmd of analysisCommands) {
         console.log(`🔍 Running ${cmd.name} on cloned repository...`);
-        const result = await executeAgentrc(agentrcPath, cmd.args, tempDir, timeout * 1000, cmd.name, interactive);
+        const result = await executeAgentrc(agentrcPath, cmd.args, tempDir, timeout * 1000, cmd.name, false);
         results[cmd.name] = result;
         if (!result.success) overallSuccess = false;
         console.log(`✅ ${cmd.name} completed (${result.elapsed}s)`);
       }
-      
-      // Step 3: Skip instruction generation probes (requires Copilot CLI)
-      // For ADR synthesis, analyze + readiness data is sufficient
-      console.log(`⏭️  Skipping instruction generation probes (requires Copilot CLI)`);
-      console.log(`� Analysis and readiness data is sufficient for ADR synthesis`);
-      
-      // Add placeholder results for probes
-      results['probe-flat-root'] = { success: true, skipped: true, reason: 'Copilot CLI not required for ADR synthesis' };
-      results['probe-nested-root'] = { success: true, skipped: true, reason: 'Copilot CLI not required for ADR synthesis' };
       
     } finally {
       // Clean up temporary directory
@@ -798,35 +602,13 @@ async function collectEvidence(config) {
     }
   } else {
     // For local repos, run individual commands
-    // Run analysis commands first
-    const analysisCommands = commands.filter(cmd => cmd.name === 'analyze' || cmd.name === 'readiness');
-    for (const cmd of analysisCommands) {
+    for (const cmd of commands) {
       console.log(`🔍 ${cmd.name}`);
-      const result = await executeAgentrc(agentrcPath, cmd.args, workingDir, timeout * 1000, cmd.name, interactive);
+      const result = await executeAgentrc(agentrcPath, cmd.args, workingDir, timeout * 1000, cmd.name, false);
       results[cmd.name] = result;
       if (!result.success) overallSuccess = false;
       console.log('');
     }
-
-    // Run probe commands
-    console.log('🔍 Running probes (dry-run instruction generation)...');
-    const probeCommands = commands.filter(cmd => cmd.name.startsWith('probe-'));
-    for (const cmd of probeCommands) {
-      const result = await executeAgentrc(agentrcPath, cmd.args, workingDir, timeout * 1000, cmd.name, interactive);
-      results[cmd.name] = result;
-      if (!result.success) overallSuccess = false;
-    }
-    console.log('');
-
-    // Run generation commands
-    console.log('🔧 Running real instruction generation...');
-    const genCommands = commands.filter(cmd => cmd.name.startsWith('generate-'));
-    for (const cmd of genCommands) {
-      const result = await executeAgentrc(agentrcPath, cmd.args, workingDir, timeout * 1000, cmd.name, interactive);
-      results[cmd.name] = result;
-      if (!result.success) overallSuccess = false;
-    }
-    console.log('');
   }
 
   // Copy context files (only for local repos)
@@ -851,120 +633,10 @@ async function collectEvidence(config) {
     console.log('📄 Skipping context file copying for remote repository');
   }
   
-  // Save user comments if interactive mode
-  if (interactive) {
-    const commentsSpinner = ora('Saving user comments...').start();
-    const userComments = {};
-    
-    // Collect all user comments from results
-    Object.entries(results).forEach(([stepName, result]) => {
-      if (result.userComments) {
-        userComments[stepName] = {
-          comments: result.userComments,
-          success: result.success,
-          exitCode: result.exitCode,
-          elapsed: result.elapsed
-        };
-      }
-    });
-    
-    // Save comments to JSON file
-    if (Object.keys(userComments).length > 0) {
-      fs.writeFileSync(
-        path.join(outputDir, 'user-comments.json'),
-        JSON.stringify(userComments, null, 2)
-      );
-      commentsSpinner.succeed(`Saved ${Object.keys(userComments).length} user comment sections`);
-    } else {
-      commentsSpinner.succeed('No user comments to save');
-    }
-  }
-  
-  return { results, overallSuccess, userComments: interactive ? results : null };
+  return { results, overallSuccess };
 }
 
-// Build synthesis prompt
-function buildPrompt(config, collectionResults) {
-  const promptSpinner = ora('Building synthesis prompt...').start();
-  
-  const { outputDir, useEducation } = config;
-  
-  try {
-    // Load templates
-    const templateFile = useEducation ? 
-      'adr-synthesis-with-education-template.md' : 
-      'adr-synthesis-template.md';
-    
-    let templateContent = fs.readFileSync(path.join(scriptDir, 'templates', templateFile), 'utf8');
-    const adrTemplate = fs.readFileSync(path.join(scriptDir, 'templates', 'ai-enablement-adr-template.md'), 'utf8');
-    
-    // For educational template, compose with standard template
-    if (useEducation && templateContent.includes('{{STANDARD_SYNTHESIS_TEMPLATE}}')) {
-      const standardTemplate = fs.readFileSync(path.join(scriptDir, 'templates', 'adr-synthesis-template.md'), 'utf8');
-      templateContent = templateContent.replace('{{STANDARD_SYNTHESIS_TEMPLATE}}', standardTemplate);
-    }
-    
-    // Read collection data
-    const analyzePath = path.join(outputDir, 'analyze.json');
-    const readinessPath = path.join(outputDir, 'readiness.json');
-    const userCommentsPath = path.join(outputDir, 'user-comments.json');
-    
-    let analyzeData = '{}';
-    let readinessData = '{}';
-    let userCommentsData = '{}';
-    
-    try {
-      if (fs.existsSync(analyzePath)) {
-        analyzeData = fs.readFileSync(analyzePath, 'utf8');
-      }
-      if (fs.existsSync(readinessPath)) {
-        readinessData = fs.readFileSync(readinessPath, 'utf8');
-      }
-      if (fs.existsSync(userCommentsPath)) {
-        userCommentsData = fs.readFileSync(userCommentsPath, 'utf8');
-      }
-    } catch (error) {
-      promptSpinner.warn('Could not read some collection data');
-    }
-    
-    // Format user comments for inclusion in prompt
-    let userCommentsSection = '';
-    if (userCommentsData !== '{}') {
-      const comments = JSON.parse(userCommentsData);
-      userCommentsSection = '\n## [SECTION] User Comments & Context\n\n';
-      
-      Object.entries(comments).forEach(([stepName, stepData]) => {
-        userCommentsSection += `### ${stepName}\n\n`;
-        userCommentsSection += `**Status:** ${stepData.success ? '✅ Success' : '❌ Failed'} (${stepData.elapsed}s)\n\n`;
-        userCommentsSection += `**User Context:**\n`;
-        userCommentsSection += stepData.comments;
-        userCommentsSection += '\n\n---\n\n';
-      });
-    }
-    
-    // Replace placeholders
-    const synthesis = templateContent
-      .replace('{{ANALYZE_JSON}}', analyzeData)
-      .replace('{{READINESS_JSON}}', readinessData)
-      .replace('{{USER_COMMENTS_MD}}', userCommentsSection)
-      .replace('{{ADR_TEMPLATE_MD}}', adrTemplate);
-    
-    // Write prompt to file
-    const promptsDir = path.join(outputDir, 'prompts');
-    const promptFile = path.join(promptsDir, 'adr-synthesis-prompt.md');
-    
-    fs.writeFileSync(promptFile, synthesis);
-    
-    promptSpinner.succeed(`Synthesis prompt built (${synthesis.length} characters)`);
-    
-    return promptFile;
-  } catch (error) {
-    promptSpinner.fail(`Failed to build prompt: ${error.message}`);
-    throw error;
-  }
-}
-
-// Batch evidence collection using agentrc batch command
+// Batch evidence collection for multiple repositories
 async function collectEvidenceBatch(config) {
   const { repos, outputDir, model, timeout, token } = config;
   
@@ -976,13 +648,6 @@ async function collectEvidenceBatch(config) {
   // Create output directory
   fs.mkdirSync(outputDir, { recursive: true });
   
-  // Get agentrc path
-  const agentrcPath = path.join(scriptDir, 'node_modules', '.bin', 'agentrc');
-  
-  if (!fs.existsSync(agentrcPath)) {
-    throw new Error('agentrc not found. Please run: npm install');
-  }
-  
   // Filter remote repos for batch processing
   const remoteRepos = repos.filter(repo => repo.isRemote);
   const localRepos = repos.filter(repo => !repo.isRemote);
@@ -991,7 +656,7 @@ async function collectEvidenceBatch(config) {
   let overallSuccess = true;
   
   if (remoteRepos.length > 0) {
-    // Process remote repos individually with step-by-step approach
+    // Process remote repos individually
     console.log(`🔄 Processing ${remoteRepos.length} remote repositories sequentially...`);
     
     for (let i = 0; i < remoteRepos.length; i++) {
@@ -1006,7 +671,6 @@ async function collectEvidenceBatch(config) {
           outputDir: repoOutputDir,
           model,
           timeout,
-          interactive: false,
           isRemote: true,
           token
         });
@@ -1021,17 +685,6 @@ async function collectEvidenceBatch(config) {
         overallSuccess = false;
       }
     }
-    
-    // Create consolidated batch summary
-    const batchSummary = {
-      totalRepos: remoteRepos.length,
-      successfulRepos: remoteRepos.filter(repo => results[repo.identifier]?.overallSuccess).length,
-      failedRepos: remoteRepos.filter(repo => !results[repo.identifier]?.overallSuccess).length,
-      results: results
-    };
-    
-    fs.writeFileSync(path.join(outputDir, 'batch-summary.json'), JSON.stringify(batchSummary, null, 2));
-    console.log(`\n📊 Batch Summary: ${batchSummary.successfulRepos}/${batchSummary.totalRepos} successful`);
   }
   
   if (localRepos.length > 0) {
@@ -1050,132 +703,334 @@ async function collectEvidenceBatch(config) {
   return { results, overallSuccess };
 }
 
-// Build batch synthesis prompt
-function buildPromptBatch(config, collectionResults) {
-  const promptSpinner = ora('Building batch synthesis prompt...').start();
+// Discovery functions for auto-batch workflow
+async function getOrganizations(octokit, preselectedOrg = null) {
+  if (preselectedOrg) {
+    try {
+      const { data: org } = await octokit.rest.orgs.get({ org: preselectedOrg });
+      return [org];
+    } catch (error) {
+      throw new Error(`Organization ${preselectedOrg} not found or not accessible`);
+    }
+  }
+
+  // Get user's organizations
+  const { data: userOrgs } = await octokit.rest.orgs.listForAuthenticatedUser();
+  const { data: user } = await octokit.rest.users.getAuthenticated();
   
-  const { outputDir, useEducation } = config;
+  // Add personal account as organization option
+  const organizations = [
+    { login: user.login, description: 'Personal repositories' },
+    ...userOrgs
+  ];
   
+  return organizations;
+}
+
+async function getTeams(octokit, org) {
   try {
-    // Load templates
-    const templateFile = useEducation ? 
-      'adr-synthesis-with-education-template.md' : 
-      'adr-synthesis-template.md';
-    
-    let templateContent = fs.readFileSync(path.join(scriptDir, 'templates', templateFile), 'utf8');
-    const adrTemplate = fs.readFileSync(path.join(scriptDir, 'templates', 'ai-enablement-adr-template.md'), 'utf8');
-    
-    // For educational template, compose with standard template
-    if (useEducation && templateContent.includes('{{STANDARD_SYNTHESIS_TEMPLATE}}')) {
-      const standardTemplate = fs.readFileSync(path.join(scriptDir, 'templates', 'adr-synthesis-template.md'), 'utf8');
-      templateContent = templateContent.replace('{{STANDARD_SYNTHESIS_TEMPLATE}}', standardTemplate);
-    }
-    
-    // Read batch results
-    let batchData = '{}';
-    if (collectionResults.results.batchData) {
-      batchData = JSON.stringify(collectionResults.results.batchData, null, 2);
-    }
-    
-    // Replace placeholders
-    const synthesis = templateContent
-      .replace('{{ANALYZE_JSON}}', batchData)
-      .replace('{{READINESS_JSON}}', '{}')
-      .replace('{{USER_COMMENTS_MD}}', '')
-      .replace('{{ADR_TEMPLATE_MD}}', adrTemplate);
-    
-    // Write prompt to file
-    const promptsDir = path.join(outputDir, 'prompts');
-    fs.mkdirSync(promptsDir, { recursive: true });
-    const promptFile = path.join(promptsDir, 'batch-adr-synthesis-prompt.md');
-    
-    fs.writeFileSync(promptFile, synthesis);
-    
-    promptSpinner.succeed(`Batch synthesis prompt built (${synthesis.length} characters)`);
-    
-    return promptFile;
+    const { data: teams } = await octokit.rest.teams.list({
+      org,
+      per_page: 100
+    });
+    return teams;
   } catch (error) {
-    promptSpinner.fail(`Failed to build batch prompt: ${error.message}`);
-    throw error;
+    console.warn(`Warning: Could not fetch teams for ${org}: ${error.message}`);
+    return [];
   }
 }
 
-// Main execution
-async function main(config) {
-  validateNodeVersion();
-  
-  // Handle backward compatibility for single repo
-  if (typeof config.repos === 'string') {
-    config.repos = [config.repos];
+async function getTeamMembers(octokit, org, teamSlug) {
+  try {
+    const { data: members } = await octokit.rest.teams.listMembersInOrg({
+      org,
+      team_slug: teamSlug,
+      per_page: 100
+    });
+    return members;
+  } catch (error) {
+    console.warn(`Warning: Could not fetch members for team ${teamSlug}: ${error.message}`);
+    return [];
   }
+}
+
+async function getUserContributions(octokit, org, usernames, daysAgo = 365) {
+  const sinceDate = new Date();
+  sinceDate.setDate(sinceDate.getDate() - parseInt(daysAgo));
   
-  if (!config.repos || config.repos.length === 0) {
-    throw new Error('At least one repository must be specified');
+  // Get all repositories in the organization
+  const repos = [];
+  let page = 1;
+  let hasMore = true;
+  
+  while (hasMore) {
+    const response = await octokit.rest.repos.listForOrg({
+      org,
+      type: 'all',
+      per_page: 100,
+      page,
+    });
+
+    repos.push(...response.data);
+    hasMore = response.data.length === 100;
+    page++;
   }
+
+  const contributions = new Map();
   
-  // Parse repository identifiers
-  const parsedRepos = parseRepoIdentifiers(config.repos);
-  
-  // Get GitHub token for remote repos
-  let token = null;
-  if (parsedRepos.some(repo => repo.isRemote)) {
-    token = await getGitHubToken();
-    if (!token) {
-      throw new Error('GitHub authentication required for remote repositories. Run "agent-adr auth-setup" to configure.');
-    }
+  for (const repo of repos) {
+    const repoContributions = new Map();
     
-    // Validate repository access
-    await validateRepoAccess(parsedRepos, token);
-  }
-  
-  // Choose processing strategy
-  if (config.batch && parsedRepos.length > 1) {
-    // Use agentrc batch command for multiple repos
-    const collectionResults = await collectEvidenceBatch({ ...config, repos: parsedRepos, token });
-    const promptFile = buildPromptBatch(config, collectionResults);
-    
-    console.log('');
-    console.log(`🎯 Ready for advanced AI model`);
-    console.log(`📄 Prompt file: ${promptFile}`);
-    console.log(`📁 Collection artifacts: ${config.outputDir}`);
-    
-    if (collectionResults.overallSuccess) {
-      console.log('✅ Batch collection completed successfully');
-    } else {
-      console.log('⚠️  Batch collection completed with some failures');
-    }
-  } else {
-    // Process repos individually (backward compatibility)
-    for (let i = 0; i < parsedRepos.length; i++) {
-      const repo = parsedRepos[i];
-      const repoSuffix = parsedRepos.length > 1 ? `-${repo.identifier.replace(/\//g, '-')}` : '';
-      const repoOutputDir = path.join(config.outputDir, `repo${i}${repoSuffix}`);
-      
-      console.log(`\n📦 Processing repository ${i + 1}/${parsedRepos.length}: ${repo.identifier}`);
-      
-      let localRepoPath = repo.path || repo.identifier;
-      
-      // For remote repos, we'll use agentrc's built-in remote handling
-      if (repo.isRemote) {
-        localRepoPath = repo.identifier; // Pass as owner/repo to agentrc
+    for (const username of usernames) {
+      try {
+        // Check commits by user
+        const commits = await octokit.rest.repos.listCommits({
+          owner: org,
+          repo: repo.name,
+          author: username,
+          since: sinceDate.toISOString(),
+          per_page: 1,
+        });
+
+        // Check pull requests by user
+        const prs = await octokit.rest.pulls.list({
+          owner: org,
+          repo: repo.name,
+          creator: username,
+          state: 'all',
+          since: sinceDate.toISOString(),
+          per_page: 1,
+        });
+
+        // Check issues by user
+        const issues = await octokit.rest.issues.listForRepo({
+          owner: org,
+          repo: repo.name,
+          creator: username,
+          state: 'all',
+          since: sinceDate.toISOString(),
+          per_page: 1,
+        });
+
+        const hasContribution = commits.data.length > 0 || prs.data.length > 0 || issues.data.length > 0;
+        
+        if (hasContribution) {
+          repoContributions.set(username, {
+            commits: commits.data.length,
+            pullRequests: prs.data.length,
+            issues: issues.data.length,
+            lastCommit: commits.data.length > 0 ? commits.data[0].commit.author.date : null,
+          });
+        }
+
+      } catch (error) {
+        // Skip if user not found or no access
+        continue;
       }
-      
-      const collectionResults = await collectEvidence({ 
-        ...config, 
-        repoPath: localRepoPath, 
-        outputDir: repoOutputDir,
-        isRemote: repo.isRemote,
-        token
+    }
+
+    if (repoContributions.size > 0) {
+      contributions.set(repo.full_name, {
+        repository: repo.full_name,
+        description: repo.description,
+        language: repo.language,
+        private: repo.private,
+        contributions: Object.fromEntries(repoContributions),
+        totalContributors: repoContributions.size,
       });
-      
-      const promptFile = buildPrompt({ ...config, outputDir: repoOutputDir }, collectionResults);
-      
-      console.log(`✅ Completed ${repo.identifier}`);
-      console.log(`📄 Prompt: ${promptFile}`);
+    }
+
+    // Add small delay to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  return Array.from(contributions.values());
+}
+
+// Auto-batch command implementation
+async function autoBatchCommand(options) {
+  console.log('🚀 Starting interactive team-based repository discovery...\n');
+  
+  // Get authentication token
+  const token = await getGitHubToken();
+  if (!token) {
+    console.error('❌ No GitHub authentication found. Run "agent-adr auth-setup" first.');
+    process.exit(1);
+  }
+  
+  const octokit = new Octokit({ auth: token });
+  const spinner = ora('Connecting to GitHub...').start();
+  
+  try {
+    // Get authenticated user info
+    const { data: user } = await octokit.rest.users.getAuthenticated();
+    spinner.succeed(`Connected as: ${user.login}`);
+    
+    // Step 1: Organization selection
+    const organizations = await getOrganizations(octokit, options.org);
+    
+    let selectedOrg;
+    if (options.org) {
+      selectedOrg = options.org;
+      console.log(`📂 Using specified organization: ${selectedOrg}`);
+    } else {
+      const { organization } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'organization',
+          message: 'Select organization:',
+          choices: organizations.map(org => ({
+            name: `${org.login} - ${org.description || 'No description'}`,
+            value: org.login
+          }))
+        }
+      ]);
+      selectedOrg = organization;
     }
     
-    console.log('');
-    console.log(`🎯 Ready for advanced AI model`);
-    console.log(`📁 Collection artifacts: ${config.outputDir}`);
+    // Step 2: Team discovery and selection
+    console.log(`\n🔍 Discovering teams in ${selectedOrg}...`);
+    const teams = await getTeams(octokit, selectedOrg);
+    
+    if (teams.length === 0) {
+      console.log('No teams found in this organization.');
+      return;
+    }
+    
+    let selectedTeams;
+    if (options.nonInteractive) {
+      selectedTeams = teams.map(team => team.slug);
+      console.log(`🤖 Auto-selected all ${teams.length} teams`);
+    } else {
+      const { selectedTeams: interactiveTeams } = await inquirer.prompt([
+        {
+          type: 'checkbox',
+          name: 'selectedTeams',
+          message: 'Select teams to analyze:',
+          choices: teams.map(team => ({
+            name: `${team.name} (${team.privacy || 'unknown'} privacy${team.members_count ? `, ${team.members_count} members` : ', member count hidden'})`,
+            value: team.slug
+          }))
+        }
+      ]);
+      selectedTeams = interactiveTeams;
+    }
+    
+    if (selectedTeams.length === 0) {
+      console.log('No teams selected.');
+      return;
+    }
+    
+    // Step 3: User discovery from selected teams
+    console.log(`\n👥 Discovering users from ${selectedTeams.length} teams...`);
+    const allUsers = new Map();
+    
+    for (const teamSlug of selectedTeams) {
+      const members = await getTeamMembers(octokit, selectedOrg, teamSlug);
+      members.forEach(member => {
+        if (!allUsers.has(member.login)) {
+          allUsers.set(member.login, {
+            login: member.login,
+            name: member.name,
+            teams: []
+          });
+        }
+        allUsers.get(member.login).teams.push(teamSlug);
+      });
+    }
+    
+    if (allUsers.size === 0) {
+      console.log('No users found in selected teams.');
+      return;
+    }
+    
+    // Step 4: User selection (pre-select all, allow deselection)
+    let selectedUsers;
+    if (options.nonInteractive) {
+      selectedUsers = Array.from(allUsers.keys());
+      console.log(`🤖 Auto-selected all ${selectedUsers.length} users`);
+    } else {
+      const { selectedUsers: interactiveUsers } = await inquirer.prompt([
+        {
+          type: 'checkbox',
+          name: 'selectedUsers',
+          message: 'Review users (deselect any you want to exclude):',
+          choices: Array.from(allUsers.values()).map(user => ({
+            name: `${user.login} ${user.name ? `(${user.name})` : ''} - Teams: ${user.teams.join(', ')}`,
+            value: user.login,
+            checked: true
+          }))
+        }
+      ]);
+      selectedUsers = interactiveUsers;
+    }
+    
+    if (selectedUsers.length === 0) {
+      console.log('No users selected.');
+      return;
+    }
+    
+    console.log(`\n✅ Selected ${selectedUsers.length} users from ${selectedTeams.length} teams`);
+    
+    // Step 5: Repository discovery
+    console.log(`\n🔍 Finding repositories contributed by selected users in the last ${options.days} days...`);
+    const contributions = await getUserContributions(octokit, selectedOrg, selectedUsers, options.days);
+    
+    // Step 6: Pattern filtering
+    const pattern = options.pattern || '*';
+    const regex = new RegExp(pattern.replace(/\*/g, '.*'), 'i');
+    const filteredRepos = contributions.filter(repo => regex.test(repo.repository));
+    
+    console.log(`\n📊 Found ${contributions.length} repositories with user contributions`);
+    if (pattern !== '*') {
+      console.log(`🎯 Filtered to ${filteredRepos.length} repositories matching pattern "${pattern}"`);
+    } else {
+      console.log(`📋 Showing all ${filteredRepos.length} repositories`);
+    }
+    
+    if (filteredRepos.length === 0) {
+      console.log('No repositories found matching the pattern.');
+      return;
+    }
+    
+    // Step 7: Show discovered repositories and confirm
+    console.log('\n📦 Discovered repositories:');
+    filteredRepos.forEach(repo => {
+      console.log(`  - ${repo.repository} (${repo.language || 'Unknown'}, ${repo.private ? 'Private' : 'Public'})`);
+    });
+    
+    if (options.nonInteractive) {
+      console.log(`\n🤖 Auto-proceeding with batch analysis on ${filteredRepos.length} repositories`);
+    } else {
+      const { confirmAnalysis } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'confirmAnalysis',
+          message: `Run batch analysis on ${filteredRepos.length} repositories?`,
+          default: true
+        }
+      ]);
+      
+      if (!confirmAnalysis) {
+        console.log('Analysis cancelled.');
+        return;
+      }
+    }
+    
+    // Step 8: Run batch analysis
+    console.log('\n🚀 Starting batch analysis...');
+    await runBatchAnalysis(filteredRepos.map(repo => repo.repository));
+    
+  } catch (error) {
+    spinner.fail('Failed to complete auto-batch workflow');
+    console.error('❌ Error:', error.message);
+    if (error.status === 401) {
+      console.error('Authentication failed. Please check your GitHub token.');
+    } else if (error.status === 403) {
+      console.error('Rate limit exceeded or insufficient permissions.');
+    } else if (error.status === 404) {
+      console.error('Organization or team not found or not accessible.');
+    }
+    process.exit(1);
   }
 }

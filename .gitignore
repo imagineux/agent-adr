@@ -1,13 +1,8 @@
-# Collection artifacts (temporary analysis results)
-collections/
-
 # Cache directories
-.agentrc-cache/
-.prompt-cache/
+.agent-adr-cache/
 
 # Temporary directories
 tmp/
-temp/
 
 # Node.js
 node_modules/

@@ -1,6 +1,6 @@
-# agent-adr (single-script collector)
+# agent-adr (Streamlined Batch Analysis)
 
-A minimal operator utility for collecting repository evidence with [`microsoft/agentrc`](https://github.com/microsoft/agentrc) and building a high-quality ADR synthesis prompt for stronger reasoning models.
+A streamlined batch analysis tool for repository AI readiness assessment using [`microsoft/agentrc`](https://github.com/microsoft/agentrc).
 
 ## Quick Start
 
@@ -8,55 +8,45 @@ A minimal operator utility for collecting repository evidence with [`microsoft/a
 # 1. Install globally
 npm install -g github:imagineux/agent-adr
 
-# 2. Run collection (local or remote)
-agent-adr /path/to/client/repo --output ../collections/client-name
-agent-adr microsoft/vscode --output ../collections/vscode
+# 2. Set up authentication
+agent-adr auth-setup
 
-# 3. With educational framework (comprehensive analysis)
-agent-adr microsoft/vscode --output ../collections/vscode --education
+# 3. Run batch analysis
+agent-adr batch                    # Interactive org and repo selection
+agent-adr batch --org microsoft   # Skip org selection
 
-# 4. Paste into your preferred advanced AI model
-# Copy the prompt from: ../collections/client-name/prompts/adr-synthesis-prompt.md
+# 4. Team-based auto discovery (NEW!)
+agent-adr auto-batch               # Interactive team and user selection (all repos)
+agent-adr auto-batch --org okja-engineering --pattern "ai-*"  # Targeted analysis
 ```
-
-For restricted environments with certificate issues, the git clone method works reliably where curl-based installations fail.
-
-See [USAGE.md](USAGE.md) for complete step-by-step guide.
 
 ## What this repo is (and is not)
 
-This repo is intentionally **thin**.
+This repo is intentionally **minimal** and **focused**.
 
-- ✅ Uses `agentrc` as a scanner/collector in the target environment.
-- ✅ Optionally attempts `agentrc instructions` generation (best effort).
-- ✅ Stores all collected artifacts in a directory **outside** the target repo.
-- ✅ Builds a large, structured prompt bundle with our own synthesis templates.
-- ✅ Includes a reusable ADR template + synthesis skill.
+- ✅ Uses `agentrc` for repository analysis and readiness assessment
+- ✅ Provides interactive organization and repository selection
+- ✅ Generates consolidated JSON summary of batch analysis
+- ✅ Handles both local and remote repositories
 
-- ❌ Not a full CLI platform.
-- ❌ Not a reimplementation of `agentrc`.
-- ❌ Not coupled to the Copilot SDK.
-- ❌ Not writing into the target repo during normal collection.
+- ❌ Not a full CLI platform with multiple commands
+- ❌ No prompt generation or AI synthesis templates
+- ❌ No TUI mode or interactive workflows
+- ❌ No educational frameworks or ADR templates
 
 ## Why this exists
 
-We use `agentrc` only as an artifact collector and optional instruction generator.
-
-We own:
-- Collection runbook
-- Prompt templates
-- ADR template
-- Final synthesis layer and recommendations
-
-We do **not** delegate final recommendations or ADR authorship to `agentrc`.
+We use `agentrc` as the analysis engine and focus on:
+- **Simple batch workflow** - Authenticate → Select org → Analyze repos → JSON summary
+- **Repository readiness data** - Analysis and readiness scores for portfolio assessment
+- **Consolidated output** - Single JSON file with all repository data
 
 ## Workflow model
 
 1. **Install globally** - `npm install -g github:imagineux/agent-adr`
-2. **Run single command** using `agent-adr --output`
-3. **Prompt saved to output directory** - Ready to copy/paste
-4. **Paste into your preferred advanced AI model** for synthesis
-5. **Review and deliver** repo-specific AI enablement ADR
+2. **Set up authentication** - `agent-adr auth-setup`
+3. **Run batch analysis** - `agent-adr batch`
+4. **Review JSON summary** - Check `.agent-adr-cache/batch-summary.json`
 
 ## Prerequisites
 
@@ -97,154 +87,131 @@ cd agent-adr
 npm install
 ```
 
-## Happy path
+## Core Commands
+
+### `agent-adr batch` (primary command)
+
+Interactive batch repository analysis:
 
 ```bash
-# Global installation - one time setup
-npm install -g github:imagineux/agent-adr
+# Interactive organization and repository selection
+agent-adr batch
 
-# Collect artifacts and generate prompt
-agent-adr /path/to/target/repo --output ../collections/target-repo-name
-
-# Copy prompt from output directory - ready to paste into your preferred advanced AI model
+# Target specific organization
+agent-adr batch --org microsoft
 ```
 
-## Core script
-
-### `agent-adr` (global command)
-
-Usage:
-```bash
-# Single repository
-agent-adr /path/to/client/repo --output ../collections/client-repo-name
-agent-adr owner/repo --output ../collections/client-repo-name  # GitHub remote
-agent-adr https://github.com/owner/repo --output ../collections/client-repo-name
-
-# Multiple repositories (individual processing)
-agent-adr owner/repo1 owner/repo2 owner/repo3 --output ../collections/batch-analysis
-
-# Batch processing (recommended for multiple repos)
-agent-adr owner/repo1 owner/repo2 owner/repo3 --output ../collections/batch-analysis --batch
-
-# Interactive repository discovery (NEW!)
-agent-adr discover
-agent-adr discover --org microsoft
-
-# Options
---output DIR         Output directory for collection artifacts and prompts (required)
---education          Use educational synthesis template with comprehensive framework
---model MODEL        AI model to use (default: gpt-5-mini)
---timeout SECONDS    Timeout per command in seconds (default: 300)
---interactive        Interactive mode - review and confirm each step
---batch              Process multiple repositories using agentrc batch command
-```
-
-**Repository Formats:**
-- Local path: `/path/to/local/repo`
-- GitHub identifier: `owner/repo`
-- Full GitHub URL: `https://github.com/owner/repo`
-
-Remote repos are accessed directly via GitHub API (no cloning required).
-
-What it does:
-- Validates Node.js environment
-- Enforces `AGENTRC_DEBUG_COPILOT=1`
-- Preserves `AGENTRC_COPILOT_CLI_PATH` if provided
-- Overrides model for instruction flow (default: `gpt-5-mini`)
-- **Accesses remote repos via GitHub API** (no temporary directories)
-- Supports batch processing of multiple repositories
-- Captures stdout/stderr/exit/status for analyze/readiness/probes/generation attempts
-- Copies context files for local repos only
-- **Builds synthesis prompt in memory using Node.js**
-- **Saves prompt to file for easy copy/paste**
-- Aborts if output directory would be inside the client repo (local repos only)
-
-Outputs:
-- **Prompt saved to file** - Ready for any advanced AI model synthesis
-- `prompts/adr-synthesis-prompt.md` - Complete synthesis prompt
-- Complete collection artifacts in `../collections/client-repo-name/`
-
-## New Features: GitHub API Integration & Batch Processing
-
-### Key Improvements
-- **No More Cloning**: Remote repositories are accessed directly via GitHub API
-- **Private Repo Support**: Full support for private repositories with PAT authentication
-- **Batch Processing**: Process multiple repositories efficiently using agentrc's batch command
-- **Better Performance**: Leverages agentrc's internal optimization and caching
-- **Enterprise Ready**: Proper authentication and error handling
-
-### Authentication
-- Secure PAT storage in `~/.config/agent-adr/config.json`
-- Environment variable fallback (`GITHUB_PAT`)
-- Token validation during setup
-- Required scopes: `repo`, `read:org`
-
-### Batch Processing Benefits
-- Parallel processing of multiple repositories
-- Single command execution across repos
-- Consolidated output for cross-repo analysis
-- Leverages agentrc's built-in remote capabilities
-
-## Interactive Repository Discovery
-
-**New: Step-by-step repository selection workflow**
-
-```bash
-# Interactive discovery with organization and repository selection
-agent-adr discover
-
-# Target specific organization with filtering
-agent-adr discover --org microsoft
-agent-adr discover --org microsoft --name "TypeScript-*"
-agent-adr discover --org mycompany --name "tps-*" --private
-agent-adr discover --org myorg --language "TypeScript" --description "*API*"
-```
-
-**Workflow Steps:**
+**Workflow:**
 1. **Authentication Check** - Validates GitHub PAT access
 2. **Organization Selection** - Choose from your available organizations
 3. **Repository Selection** - Multi-select repositories to analyze  
-4. **Configuration** - Set output directory and processing options
-5. **Automatic Execution** - Runs analysis with selected repositories
+4. **Batch Analysis** - Automatic analysis with real-time progress
+5. **JSON Summary** - Consolidated results in `.agent-adr-cache/batch-summary.json`
 
-**Filtering Options:**
+### `agent-adr auto-batch` (team-based discovery)
+
+Interactive team-based repository discovery and analysis:
+
 ```bash
---org <org>              Target specific organization
---name <pattern>         Filter by repository name (supports wildcards)
---description <pattern>  Filter by description text (supports wildcards)  
---language <language>    Filter by primary programming language
---private               Show only private repositories
---public                Show only public repositories
+# Simple interactive command
+agent-adr auto-batch
+
+# With pre-selected organization
+agent-adr auto-batch --org okja-engineering
+
+# With custom repository pattern
+agent-adr auto-batch --org okja-engineering --pattern "ai-*"
+
+# With custom time window
+agent-adr auto-batch --org okja-engineering --days 180
 ```
 
-**Pattern Matching:**
-- Use `*` as wildcard: `"tps-*"` matches "tps-api", "tps-web", etc.
-- Case insensitive: `"typescript"` matches "TypeScript" and "typescript"
-- Description filtering searches repository descriptions
+**Workflow:**
+1. **Organization Selection** - Choose from your accessible organizations
+2. **Team Discovery** - Browse available teams in the selected organization  
+3. **Team Selection** - Multi-select teams to analyze
+4. **User Review** - All team members pre-selected, deselect any you want to exclude
+5. **Repository Discovery** - Find repos contributed by selected users (last 12 months)
+6. **Pattern Filtering** - `--pattern <pattern>` - Repository name pattern (default: `*`, matches all repos)
+7. **Confirmation** - Review discovered repositories before analysis
+8. **Batch Analysis** - Automatic analysis of all discovered repositories
 
-**Examples:**
+**Key Features:**
+- **Team-Based**: Automatically discover teams and their members
+- **Contribution-Driven**: Analysis based on actual code contributions, not just permissions
+- **Pattern Matching**: Filter repositories by naming patterns (e.g., `ai-*`, `service-*`)
+- **Interactive Selection**: Flexible user selection with deselection options
+- **Time Windows**: Configurable lookback periods for contribution analysis
+
+### `generate-ai-report` (report generation)
+
+Generate comprehensive report combining analysis data with documentation:
+
 ```bash
-# Find all repos starting with "tps-" in my company
-agent-adr discover --org mycompany --name "tps-*"
+# Generate report with default paths
+generate-ai-report
 
-# Find TypeScript repositories with "API" in description
-agent-adr discover --org myorg --language TypeScript --description "*API*"
+# Custom paths
+generate-ai-report /path/to/batch-summary.json /path/to/output.md
 
-# Find only private repositories with "service" in name
-agent-adr discover --org mycompany --name "*service*" --private
+# Using npm script
+npm run report
 ```
 
-**Benefits:**
-- ✅ No need to manually type repository names
-- ✅ See repository descriptions and privacy status
-- ✅ Browse your accessible organizations and repos
-- ✅ Interactive multi-selection with validation
-- ✅ Powerful filtering with pattern matching
-- ✅ Automatic batch processing optimization
+**Output:** Single markdown file containing:
+- Executive summary of analysis results
+- Repository overview table
+- Detailed analysis and readiness data
+- **AI ADR Synthesis Prompt** - Ready-to-use prompt for AI models
+- Complete documentation (ADR template, educational framework, portfolio guide)
+- Next steps and implementation guidance
 
-**Example Session:**
+### `agent-adr auth-setup`
+
+Configure GitHub authentication:
+
 ```bash
-$ agent-adr discover
+# Interactive token setup
+agent-adr auth-setup
+
+# Direct token provision
+agent-adr auth-setup --token "ghp_your_token_here"
+```
+
+## Output Structure
+
+**Analysis Data:**
+```
+.agent-adr-cache/
+├── batch-summary.json    # Consolidated analysis results
+└── reports/              # Generated comprehensive reports
+    └── comprehensive-ai-readiness-report.md
+```
+
+**Batch Summary JSON Structure:**
+```json
+{
+  "timestamp": "2024-03-16T16:05:00.000Z",
+  "totalRepos": 5,
+  "successfulRepos": 4,
+  "failedRepos": 1,
+  "repositories": ["owner/repo1", "owner/repo2", ...],
+  "results": {
+    "owner/repo1": {
+      "results": {
+        "analyze": { "success": true, "stdout": "...", "elapsed": 45 },
+        "readiness": { "success": true, "stdout": "...", "elapsed": 32 }
+      },
+      "overallSuccess": true
+    }
+  }
+}
+```
+
+## Example Session
+
+```bash
+$ agent-adr batch
 
 🔍 Discovering GitHub repositories...
 ✔ Connected as: your-username
@@ -252,134 +219,126 @@ $ agent-adr discover
 ? Select organization: 
 ❯ your-username - Personal repositories
   organization1 - Company repos  
-  organization2 - Open source projects
 
 ? Select repositories to analyze:
 ❯ ◯ repo1 - Description here (🌍 public)
   ◯ repo2 - Private project (🔒 private)
-  ◯ repo3 - Another repo (🌍 public)
 
-? Output directory for collection: ../collections/my-analysis
-? Use batch processing for better performance? Yes
+✅ Selected 2 repositories:
+  - owner/repo1
+  - owner/repo2
 
-🚀 Starting analysis...
+🚀 Starting batch analysis...
+📦 Processing repository 1/2: owner/repo1
+✅ Completed owner/repo1
+📦 Processing repository 2/2: owner/repo2
+✅ Completed owner/repo2
+
+✅ Batch analysis complete!
+📊 Summary JSON created: .agent-adr-cache/batch-summary.json
+📈 Analyzed 2/2 repositories successfully
 ```
+
+## Data Collected
+
+For each repository, the tool collects:
+
+### Analysis Data (`analyze.json`)
+- Repository structure and languages
+- Frameworks and dependencies
+- Build system information
+- Documentation assessment
+
+### Readiness Data (`readiness.json`)
+- Overall AI readiness score (0-100)
+- Engineering maturity assessment
+- Infrastructure readiness
+- Documentation quality
+- Safety and governance evaluation
 
 ## Safety and Hardening
 
-This wrapper has been hardened for enterprise use:
+This tool has been hardened for enterprise use:
 
-- **Repo Boundary Guard**: Collection will abort if the output directory is inside the target repo (prevents accidental repo contamination)
-- **Argv-based Command Execution**: Commands are executed via arrays rather than string eval, making them safe for paths with spaces, `$`, backticks, or quotes
-- **Failure Robustness**: Collection continues across probe/generation failures; all artifacts produce status/log files even on failure
-- **In-Memory Processing**: Prompt building happens entirely in memory with no intermediate files
+- **Secure Authentication** - PAT tokens stored securely in user config
+- **Safe Command Execution** - Commands executed via arrays, not string eval
+- **Error Handling** - Continues analysis across individual repository failures
+- **Temporary Cleanup** - Automatic cleanup of temporary cloned repositories
 
-## Output artifacts
+## Documentation
 
-A typical collection includes:
-- `analyze.json`
-- `readiness.json`
-- `collection-summary.json`
-- `instructions-overview.md`
-- Probe and generation attempts with status/logs
-- `context/` (best-effort copied files)
-- `prompts/adr-synthesis-prompt.md` (backup copy)
+The tool includes comprehensive documentation for teams preparing ADRs based on analysis results:
 
-## Templates
+### [ADR Template](docs/adr-template.md)
+Structured template for creating AI Enablement Architecture Decision Records based on your analysis data.
 
-The tool uses different synthesis templates based on the analysis depth required:
+### [Educational Framework](docs/educational-framework.md)
+8-layer maturity model for assessing AI readiness and planning implementation strategies.
 
-### Standard Template (`adr-synthesis-template.md`)
-- Basic repository analysis and AI readiness assessment
-- Focused on practical recommendations
-- Suitable for quick assessments and mature repositories
+### [Synthesis Prompt Template](docs/synthesis-prompt-template.md)
+Comprehensive AI prompt template with placeholders for generating detailed Architecture Decision Records using your preferred AI model.
 
-### Educational Template (`adr-synthesis-with-education-template.md`) 
-- **Template composition** - Includes standard template + educational framework
-- **8-layer maturity model** for comprehensive AI readiness assessment
-- **Evaluation matrix** for recommendation sequencing and risk assessment
-- **Enhanced analysis requirements** - team readiness, resource planning, validation experiments
-- Suitable for organizations new to AI or needing comprehensive transformation plans
+### [Portfolio Analysis Guide](docs/portfolio-analysis-guide.md)
+Complete guide for interpreting batch analysis results and making strategic decisions.
 
-### ADR Output Template (`ai-enablement-adr-template.md`)
-- Structured format for the final Architecture Decision Record
-- Standard sections for consistent documentation
-- Used by both synthesis templates for output formatting
+## Using Documentation with Analysis Results
 
-**Template selection:**
+1. **Run batch analysis**: `agent-adr batch`
+2. **Review results**: Check `.agent-adr-cache/batch-summary.json`
+3. **Generate comprehensive report**: `generate-ai-report`
+4. **Find your report**: Check `.agent-adr-cache/reports/comprehensive-ai-readiness-report.md`
+5. **Copy AI Synthesis Prompt**: Use the prompt section in the generated report
+6. **Generate ADR with AI**: Paste the prompt into ChatGPT, Claude, or your preferred AI model
+7. **Refine with templates**: Use [ADR Template](docs/adr-template.md) and [Educational Framework](docs/educational-framework.md) to enhance the AI-generated content
+8. **Plan implementation**: Follow [Portfolio Analysis Guide](docs/portfolio-analysis-guide.md) for strategic rollout
+
+## Complete Workflow Example
+
 ```bash
-# Standard analysis
-agent-adr repo --output ../collections/repo
+# 1. Set up authentication
+agent-adr auth-setup
 
-# Educational analysis with comprehensive framework
-agent-adr repo --output ../collections/repo --education
+# 2. Run batch analysis
+agent-adr batch --org Okja-Engineering
+
+# 3. Generate comprehensive report (saved to .agent-adr-cache/reports/)
+generate-ai-report
+
+# 4. Find your report at: .agent-adr-cache/reports/comprehensive-ai-readiness-report.md
+# 5. Copy the AI Synthesis Prompt from the report and paste into your AI model
+# 6. Use the generated ADR with the documentation templates to finalize your strategy
 ```
 
-## Installation
+All analysis data and reports are now organized in the `.agent-adr-cache/` directory:
+- `batch-summary.json` - Raw analysis results
+- `reports/` - Generated comprehensive reports with AI synthesis prompts
 
-**Single blessed method: Git clone**
+## Troubleshooting
+
+### Common Issues
+
+**"No GitHub authentication found"**
 ```bash
-git clone https://github.com/imagineux/agent-adr.git
-cd agent-adr
-nvm install lts-* && nvm use
+agent-adr auth-setup
 ```
 
-This works in all environments, including those with certificate restrictions where curl-based installers fail.
+**"Organization not found or not accessible"**
+- Ensure your PAT has `read:org` scope
+- Verify you're a member of the target organization
 
-## Usage
+**"Repository access failed"**
+- Check PAT has `repo` scope
+- Verify repository permissions
+- For private repos, ensure you're a collaborator
 
-**Single command does everything:**
+### Debug Mode
+
+Set environment variable for detailed logging:
 ```bash
-# Local repository
-agent-adr /path/to/repo --output ../collections/repo-name
-
-# GitHub repository (owner/repo format)
-agent-adr microsoft/vscode --output ../collections/vscode
-
-# Full GitHub URL
-agent-adr https://github.com/microsoft/vscode --output ../collections/vscode
-
-# Custom model and timeout
-agent-adr microsoft/vscode --output ../collections/vscode gpt-4o 600
+export DEBUG=agent-adr:*
+agent-adr batch
 ```
 
-Remote repos are automatically cloned to temporary directories and cleaned up afterward.
+## License
 
-The prompt will be saved to `../collections/repo-name/prompts/adr-synthesis-prompt.md`, ready for any advanced AI model.
-
-## AI Enablement Framework
-
-### 8-Layer Maturity Model
-
-This tool uses an 8-layer framework to assess AI readiness:
-
-1. **Repository & documentation basics** - Clean, well-documented codebase
-2. **Build/test reliability** - Consistent CI/CD and quality gates  
-3. **Work decomposition & task clarity** - Tasks broken into AI-assistable units
-4. **AI-facing instructions quality** - Clear, context-aware AI guidance
-5. **Evaluation and feedback loops** - Systematic assessment of AI output quality
-6. **Safe workflow automation** - Repeatable AI-augmented processes
-7. **Cross-tool integration** - AI capabilities connected across development stack
-8. **Adaptive/autonomous operation** - Learning and improvement loops
-
-### Available AI Capabilities
-
-| Capability | Description | Maturity Level Required |
-|------------|-------------|------------------------|
-| **Copilot CLI** | Command-line AI assistance for development tasks | Layer 3-4 |
-| **Copilot Instructions** | Repository-specific AI behavior guidance | Layer 4 |
-| **Prompting Skills** | Human-AI interaction patterns and techniques | Layer 3-5 |
-| **Evaluation Frameworks** | Systematic assessment of AI output quality | Layer 5-6 |
-| **GitHub Actions Hooks** | Automated workflow integration points | Layer 6-7 |
-
-### Decision-Making Framework
-
-When evaluating AI enablement investments:
-
-| Factor | Weight | Questions to Ask |
-|--------|--------|------------------|
-| **Impact** | 30% | Does this significantly improve developer productivity or code quality? |
-| **Feasibility** | 25% | Do we have the skills and infrastructure to implement this effectively? |
-| **Risk** | 20% | What are the safety, security, or quality risks? |
-| **Cost** | 15% | What is the implementation and maintenance cost? |
-| **Strategic Alignment** | 10% | Does this support our broader technical and business goals? |
+MIT License - see LICENSE file for details.
